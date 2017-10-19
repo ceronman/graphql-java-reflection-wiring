@@ -374,7 +374,7 @@ public class ReflectionWiringFactoryTest {
     }
 
     @Test
-    public void testNestedFields() throws Exception {
+    public void resolveObjectReturn() throws Exception {
         String result = executeQuery("" +
                         "schema {\n" +
                         "    query: TestClass3\n" +
@@ -390,6 +390,26 @@ public class ReflectionWiringFactoryTest {
                 "{ test4 { field1, field2 } }");
         assertEquals(
                 "{test4={field1=result_field_1, field2=42}}",
+                result);
+    }
+
+    @Test
+    public void resolveObjectParam() throws Exception {
+        String result = executeQuery("" +
+                        "schema {\n" +
+                        "    query: TestClass3\n" +
+                        "}\n" +
+                        "\n" +
+                        "type TestClass3 {\n" +
+                        "    objectArg(obj: InputTestClass): String\n" +
+                        "}\n" +
+                        "input InputTestClass {\n" +
+                        "    field1: String\n" +
+                        "    field2: Int\n" +
+                        "}\n",
+                "{ objectArg(obj: { field1: \"hello\", field2: 1 }) }");
+        assertEquals(
+                "{objectArg=hello1}",
                 result);
     }
 }

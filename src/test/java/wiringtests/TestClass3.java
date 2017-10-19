@@ -71,4 +71,8 @@ public class TestClass3 {
     public static String fetchFieldWithListParam(DataFetchingEnvironment env, List<Integer> arg) {
         return String.join("_", arg.stream().map(Object::toString).collect(Collectors.toList()));
     }
+
+    public static String fetchObjectArg(DataFetchingEnvironment env, InputTestClass obj) {
+        return obj.getField1() + obj.getField2();
+    }
 }

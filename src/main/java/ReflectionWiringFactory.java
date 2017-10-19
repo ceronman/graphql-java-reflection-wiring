@@ -1,3 +1,4 @@
+import com.sun.tools.internal.jxc.ap.Const;
 import graphql.language.*;
 import graphql.language.Type;
 import graphql.schema.DataFetcher;
@@ -17,6 +18,7 @@ public class ReflectionWiringFactory implements WiringFactory {
     private final List<String> errors;
     private final Map<String, Set<Class>> scalarTypeMap;
     private final Map<String, Class> objectTypeMap;
+    private final Map<String, Class> inputObjectTypeMap;
 
     public List<String> getErrors() {
         return errors;
@@ -26,6 +28,7 @@ public class ReflectionWiringFactory implements WiringFactory {
         this.resolverPackage = resolverPackage;
         errors = new ArrayList<>();
         objectTypeMap = new HashMap<>();
+        inputObjectTypeMap = new HashMap<>();
         scalarTypeMap = new HashMap<>();
 
         scalarTypeMap.put("Boolean", new HashSet<>(Arrays.asList(Boolean.class, boolean.class)));
@@ -34,17 +37,17 @@ public class ReflectionWiringFactory implements WiringFactory {
         scalarTypeMap.put("String", new HashSet<>(Arrays.asList(String.class)));
         scalarTypeMap.put("ID", new HashSet<>(Arrays.asList(String.class)));
 
-        for (String typeName : registry.types().keySet()) {
+        registry.types().forEach((typeName, typeDef) -> {
             Class c = findTypeClass(typeName);
             if (c != null) {
-                objectTypeMap.put(typeName, c);
+                if (typeDef instanceof ObjectTypeDefinition) {
+                    objectTypeMap.put(typeName, c);
+                } else if (typeDef instanceof InputObjectTypeDefinition) {
+                    inputObjectTypeMap.put(typeName, c);
+                    findInputTypeConstructor(c);
+                }
             }
-        }
-    }
-
-    @Override
-    public boolean providesTypeResolver(InterfaceWiringEnvironment environment) {
-        return false;
+        });
     }
 
     @Override
@@ -196,6 +199,8 @@ public class ReflectionWiringFactory implements WiringFactory {
                 return scalarTypeMap.getOrDefault(typeName, Collections.emptySet()).contains(javaType);
             } else if (objectTypeMap.containsKey(typeName)) {
                 return objectTypeMap.get(typeName) == javaType;
+            } else if (inputObjectTypeMap.containsKey(typeName)) {
+                return inputObjectTypeMap.get(typeName) == javaType;
             }
         } else if (graphqlType instanceof ListType) {
             if (!List.class.isAssignableFrom(javaType)) {
@@ -217,6 +222,15 @@ public class ReflectionWiringFactory implements WiringFactory {
         return false;
     }
 
+    private Constructor<?> findInputTypeConstructor(Class<?> inputType) {
+        try {
+            return inputType.getConstructor(Map.class);
+        } catch (NoSuchMethodException e) {
+            error("InputType %s doesn't have a Map<String,Object> constructor", inputType.getName());
+            return null;
+        }
+    }
+
     private DataFetcher buildDataFetcherFromMethod(Method method, List<InputValueDefinition> fieldParams) {
         return env -> {
             if (!Modifier.isStatic(method.getModifiers()) && env.getSource() == null) {
@@ -225,10 +239,18 @@ public class ReflectionWiringFactory implements WiringFactory {
 
             List parameters = new ArrayList();
             parameters.add(env);
-            for (InputValueDefinition fieldParam : fieldParams) {
-                parameters.add(env.getArgument(fieldParam.getName()));
-            }
+
             try {
+                for (InputValueDefinition fieldParam : fieldParams) {
+                    Class<?> inputType = inputObjectTypeMap.get(((TypeName)fieldParam.getType()).getName());
+                    if (inputType != null) {
+                        Constructor<?> constructor = findInputTypeConstructor(inputType);
+                        Object parameter = constructor.newInstance((Map)env.getArgument(fieldParam.getName()));
+                        parameters.add(parameter);
+                    } else {
+                        parameters.add(env.getArgument(fieldParam.getName()));
+                    }
+                }
                 return method.invoke(env.getSource(), parameters.toArray());
             } catch (Exception e) {
                 throw new RuntimeException("Error invoking data fetcher", e);
