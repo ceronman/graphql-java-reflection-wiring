@@ -1,10 +1,8 @@
-import com.sun.tools.internal.jxc.ap.Const;
 import graphql.language.*;
 import graphql.language.Type;
 import graphql.schema.DataFetcher;
 import graphql.schema.DataFetchingEnvironment;
 import graphql.schema.idl.FieldWiringEnvironment;
-import graphql.schema.idl.InterfaceWiringEnvironment;
 import graphql.schema.idl.TypeDefinitionRegistry;
 import graphql.schema.idl.WiringFactory;
 
@@ -16,9 +14,10 @@ public class ReflectionWiringFactory implements WiringFactory {
 
     private final String resolverPackage;
     private final List<String> errors;
-    private final Map<String, Set<Class>> scalarTypeMap;
-    private final Map<String, Class> objectTypeMap;
-    private final Map<String, Class> inputObjectTypeMap;
+    private final Map<String, Set<Class<?>>> scalarTypeMap;
+    private final Map<String, Class<?>> objectTypeMap;
+    private final Map<String, Class<?>> inputObjectTypeMap;
+    private final Map<String, Class<? extends Enum>> enumTypeMap;
 
     public List<String> getErrors() {
         return errors;
@@ -30,6 +29,7 @@ public class ReflectionWiringFactory implements WiringFactory {
         objectTypeMap = new HashMap<>();
         inputObjectTypeMap = new HashMap<>();
         scalarTypeMap = new HashMap<>();
+        enumTypeMap = new HashMap<>();
 
         scalarTypeMap.put("Boolean", new HashSet<>(Arrays.asList(Boolean.class, boolean.class)));
         scalarTypeMap.put("Int", new HashSet<>(Arrays.asList(Integer.class, int.class)));
@@ -38,13 +38,30 @@ public class ReflectionWiringFactory implements WiringFactory {
         scalarTypeMap.put("ID", new HashSet<>(Arrays.asList(String.class)));
 
         registry.types().forEach((typeName, typeDef) -> {
-            Class c = findTypeClass(typeName);
+            Class<?> c = findClass(typeName);
             if (c != null) {
                 if (typeDef instanceof ObjectTypeDefinition) {
                     objectTypeMap.put(typeName, c);
                 } else if (typeDef instanceof InputObjectTypeDefinition) {
                     inputObjectTypeMap.put(typeName, c);
-                    findInputTypeConstructor(c);
+                    findInputTypeConstructor(c); // TODO: Find better way of doing validation here.
+                } else if (typeDef instanceof EnumTypeDefinition) {
+                    if (!c.isEnum()) {
+                        error("Class '%s' is not Enum", c.getName());
+                        return;
+                    }
+                    Class<? extends Enum> e = (Class<? extends Enum>) c;
+                    Set<String> graphqlEnumNames = ((EnumTypeDefinition) typeDef).getEnumValueDefinitions().stream()
+                            .map(EnumValueDefinition::getName)
+                            .collect(Collectors.toSet());
+                    Set<String> javaEnumNames = Arrays.stream(e.getEnumConstants())
+                            .map(Enum::name)
+                            .collect(Collectors.toSet());
+                    if (!graphqlEnumNames.equals(javaEnumNames)) {
+                        error("Enum '%s' doesn't have the same values as '%s'", e.getName(), typeDef.getName());
+                        return;
+                    }
+                    enumTypeMap.put(typeName, e);
                 }
             }
         });
@@ -84,7 +101,7 @@ public class ReflectionWiringFactory implements WiringFactory {
         }
     }
 
-    private Class findTypeClass(String name) {
+    private Class findClass(String name) {
         String className = resolverPackage + "." + name;
         try {
             Class typeClass = Class.forName(className);
@@ -201,6 +218,8 @@ public class ReflectionWiringFactory implements WiringFactory {
                 return objectTypeMap.get(typeName) == javaType;
             } else if (inputObjectTypeMap.containsKey(typeName)) {
                 return inputObjectTypeMap.get(typeName) == javaType;
+            } else if (enumTypeMap.containsKey(typeName)) {
+                return enumTypeMap.get(typeName) == javaType;
             }
         } else if (graphqlType instanceof ListType) {
             if (!List.class.isAssignableFrom(javaType)) {
@@ -242,14 +261,27 @@ public class ReflectionWiringFactory implements WiringFactory {
 
             try {
                 for (InputValueDefinition fieldParam : fieldParams) {
-                    Class<?> inputType = inputObjectTypeMap.get(((TypeName)fieldParam.getType()).getName());
-                    if (inputType != null) {
-                        Constructor<?> constructor = findInputTypeConstructor(inputType);
-                        Object parameter = constructor.newInstance((Map)env.getArgument(fieldParam.getName()));
-                        parameters.add(parameter);
-                    } else {
-                        parameters.add(env.getArgument(fieldParam.getName()));
+                    Object paramValue = env.getArgument(fieldParam.getName());
+                    if (fieldParam.getType() instanceof TypeName) {
+                        TypeName fieldType = (TypeName) fieldParam.getType();
+
+                        Class<?> inputType = inputObjectTypeMap.get(fieldType.getName());
+                        if (inputType != null) {
+                            Constructor<?> constructor = findInputTypeConstructor(inputType);
+                            Object parameter = constructor.newInstance((Map) paramValue);
+                            parameters.add(parameter);
+                            continue;
+                        }
+
+                        Class<? extends Enum> enumType = enumTypeMap.get(fieldType.getName());
+                        if (enumType != null) {
+                            Enum<?> parameter = Enum.valueOf(enumType, (String)paramValue);
+                            parameters.add(parameter);
+                            continue;
+                        }
                     }
+
+                    parameters.add(paramValue);
                 }
                 return method.invoke(env.getSource(), parameters.toArray());
             } catch (Exception e) {

@@ -412,4 +412,25 @@ public class ReflectionWiringFactoryTest {
                 "{objectArg=hello1}",
                 result);
     }
+
+    @Test
+    public void resolveEnumParam() throws Exception {
+        String result = executeQuery("" +
+                        "schema {\n" +
+                        "    query: TestClass3\n" +
+                        "}\n" +
+                        "\n" +
+                        "type TestClass3 {\n" +
+                        "    enumArg(e: TestEnum): String\n" +
+                        "}\n" +
+                        "enum TestEnum {\n" +
+                        "    ONE\n" +
+                        "    TWO\n" +
+                        "    THREE\n" +
+                        "}\n",
+                "{ enumArg(e: THREE) }");
+        assertEquals(
+                "{enumArg=THREE}",
+                result);
+    }
 }

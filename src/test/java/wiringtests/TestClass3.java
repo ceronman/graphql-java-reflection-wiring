@@ -75,4 +75,8 @@ public class TestClass3 {
     public static String fetchObjectArg(DataFetchingEnvironment env, InputTestClass obj) {
         return obj.getField1() + obj.getField2();
     }
+
+    public static String fetchEnumArg(DataFetchingEnvironment env, TestEnum e) {
+        return e.toString();
+    }
 }
