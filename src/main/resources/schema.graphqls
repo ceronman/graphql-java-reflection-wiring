@@ -1,0 +1,21 @@
+schema {
+    query: RootQuery
+}
+
+type RootQuery {
+    hotel(id: Int): Hotel
+    hello: String
+    world: String
+}
+
+# A resolvers.Hotel Type
+type Hotel {
+    id: Int!
+    name: String
+}
+
+# A Room Type
+type Room {
+    id: Int!
+    name: String
+}
