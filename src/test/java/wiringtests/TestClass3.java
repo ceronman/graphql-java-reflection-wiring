@@ -79,4 +79,8 @@ public class TestClass3 {
     public static String fetchEnumArg(DataFetchingEnvironment env, TestEnum e) {
         return e.toString();
     }
+
+    public static TestEnum fetchEnumReturn(DataFetchingEnvironment env) {
+        return TestEnum.ONE;
+    }
 }

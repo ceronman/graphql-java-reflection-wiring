@@ -53,7 +53,7 @@ public class ReflectionWiringFactoryTest {
                 "}");
         assertEquals(1, wiringFactory.getErrors().size());
         assertEquals(
-                "Class 'wiringtests.NonExistentClass' not found", 
+                "Class 'wiringtests.NonExistentClass' not found",
                 wiringFactory.getErrors().get(0));
     }
 
@@ -291,14 +291,14 @@ public class ReflectionWiringFactoryTest {
     @Test
     public void resolveSimpleFields() throws Exception {
         String result = executeQuery("" +
-                "schema {\n" +
-                "    query: TestClass3\n" +
-                "}\n" +
-                "\n" +
-                "type TestClass3 {\n" +
-                "    simplefield: String\n" +
-                "    fieldwithargs(a: Int, b: Int): String\n" +
-                "}",
+                        "schema {\n" +
+                        "    query: TestClass3\n" +
+                        "}\n" +
+                        "\n" +
+                        "type TestClass3 {\n" +
+                        "    simplefield: String\n" +
+                        "    fieldwithargs(a: Int, b: Int): String\n" +
+                        "}",
                 "{ simplefield,  fieldwithargs(a:10, b:40) }");
         assertEquals(
                 "{simplefield=response, fieldwithargs=10, 40}",
@@ -431,6 +431,27 @@ public class ReflectionWiringFactoryTest {
                 "{ enumArg(e: THREE) }");
         assertEquals(
                 "{enumArg=THREE}",
+                result);
+    }
+
+    @Test
+    public void resolveEnumReturn() throws Exception {
+        String result = executeQuery("" +
+                        "schema {\n" +
+                        "    query: TestClass3\n" +
+                        "}\n" +
+                        "\n" +
+                        "type TestClass3 {\n" +
+                        "    enumReturn: TestEnum\n" +
+                        "}\n" +
+                        "enum TestEnum {\n" +
+                        "    ONE\n" +
+                        "    TWO\n" +
+                        "    THREE\n" +
+                        "}\n",
+                "{ enumReturn }");
+        assertEquals(
+                "{enumReturn=ONE}",
                 result);
     }
 }
