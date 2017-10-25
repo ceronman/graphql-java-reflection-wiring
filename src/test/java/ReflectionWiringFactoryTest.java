@@ -296,6 +296,32 @@ public class ReflectionWiringFactoryTest {
     }
 
     @Test
+    public void classDoesNotImplementInterface() throws Exception {
+        ReflectionWiringFactory wiringFactory = wireSchema("" +
+                "    schema {                                             \n" +
+                "        query: TestClass3                                \n" +
+                "    }                                                    \n" +
+                "                                                         \n" +
+                "    type TestClass3 {                                    \n" +
+                "        interfaceField: TestInterface                    \n" +
+                "    }                                                    \n" +
+                "                                                         \n" +
+                "    interface TestInterface {                            \n" +
+                "        field1: String                                   \n" +
+                "    }                                                    \n" +
+                "                                                         \n" +
+                "    type TestClass4 implements TestInterface {           \n" +
+                "        field1: String                                   \n" +
+                "        field2: Int                                      \n" +
+                "    }");
+        assertEquals(1, wiringFactory.getErrors().size());
+        assertEquals(
+                "Class 'wiringtests.TestClass4' does not implement interface 'wiringtests.TestInterface'",
+                wiringFactory.getErrors().get(0));
+    }
+
+
+    @Test
     public void resolveSimpleFields() throws Exception {
         String result = executeQuery("" +
                         "    schema {                                         \n" +

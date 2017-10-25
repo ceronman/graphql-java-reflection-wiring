@@ -83,4 +83,8 @@ public class TestClass3 {
     public static TestEnum fetchEnumReturn(DataFetchingEnvironment env) {
         return TestEnum.ONE;
     }
+
+    public static TestInterface fetchInterfaceField(DataFetchingEnvironment env) {
+        return null;
+    }
 }

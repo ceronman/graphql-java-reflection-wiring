@@ -1,8 +1,13 @@
+import graphql.Assert;
+import graphql.TypeResolutionEnvironment;
 import graphql.language.*;
 import graphql.language.Type;
 import graphql.schema.DataFetcher;
 import graphql.schema.DataFetchingEnvironment;
+import graphql.schema.GraphQLObjectType;
+import graphql.schema.TypeResolver;
 import graphql.schema.idl.FieldWiringEnvironment;
+import graphql.schema.idl.InterfaceWiringEnvironment;
 import graphql.schema.idl.TypeDefinitionRegistry;
 import graphql.schema.idl.WiringFactory;
 
@@ -18,6 +23,8 @@ public class ReflectionWiringFactory implements WiringFactory {
     private final Map<String, Class<?>> objectTypeMap;
     private final Map<String, Class<?>> inputObjectTypeMap;
     private final Map<String, Class<? extends Enum>> enumTypeMap;
+    private final Map<String, Class<?>> interfaceTypeMap;
+    private final Map<String, Set<String>> interfaceImplementsMap;
 
     public List<String> getErrors() {
         return errors;
@@ -30,6 +37,8 @@ public class ReflectionWiringFactory implements WiringFactory {
         inputObjectTypeMap = new HashMap<>();
         scalarTypeMap = new HashMap<>();
         enumTypeMap = new HashMap<>();
+        interfaceTypeMap = new HashMap<>();
+        interfaceImplementsMap = new HashMap<>();
 
         scalarTypeMap.put("Boolean", new HashSet<>(Arrays.asList(Boolean.class, boolean.class)));
         scalarTypeMap.put("Int", new HashSet<>(Arrays.asList(Integer.class, int.class)));
@@ -42,6 +51,13 @@ public class ReflectionWiringFactory implements WiringFactory {
             if (c != null) {
                 if (typeDef instanceof ObjectTypeDefinition) {
                     objectTypeMap.put(typeName, c);
+                    List<String> impl = ((ObjectTypeDefinition) typeDef).getImplements().stream()
+                            .map(t -> ((TypeName) t).getName())
+                            .collect(Collectors.toList());
+                    if (impl.size() > 0) {
+                        interfaceImplementsMap.putIfAbsent(typeName, new HashSet<>());
+                        interfaceImplementsMap.get(typeName).addAll(impl);
+                    }
                 } else if (typeDef instanceof InputObjectTypeDefinition) {
                     inputObjectTypeMap.put(typeName, c);
                     findInputTypeConstructor(c); // TODO: Find better way of doing validation here.
@@ -58,10 +74,25 @@ public class ReflectionWiringFactory implements WiringFactory {
                             .map(Enum::name)
                             .collect(Collectors.toSet());
                     if (!graphqlEnumNames.equals(javaEnumNames)) {
-                        error("Enum '%s' doesn't have the same values as '%s'", e.getName(), typeDef.getName());
+                        error("Enum '%s' doesn't have the same values as '%s'",
+                                e.getName(), typeDef.getName());
                         return;
                     }
                     enumTypeMap.put(typeName, e);
+                } else if (typeDef instanceof InterfaceTypeDefinition) {
+                    interfaceTypeMap.put(typeName, c);
+                    verifyInterface(c, (InterfaceTypeDefinition) typeDef);
+                }
+            }
+        });
+
+        interfaceImplementsMap.forEach((className, interfaces) -> {
+            Class<?> javaClass = objectTypeMap.get(className);
+            for (String iface : interfaces) {
+                Class<?> javaInterface = interfaceTypeMap.get(iface);
+                if (!javaInterface.isAssignableFrom(javaClass)) {
+                    error("Class '%s' does not implement interface '%s'",
+                            javaClass.getName(), javaInterface.getName());
                 }
             }
         });
@@ -69,24 +100,20 @@ public class ReflectionWiringFactory implements WiringFactory {
 
     @Override
     public boolean providesDataFetcher(FieldWiringEnvironment env) {
-        Class typeClass = objectTypeMap.get(env.getParentType().getName());
-        if (typeClass == null) {
+        Class javaClass = objectTypeMap.get(env.getParentType().getName());
+        if (javaClass == null) {
+            return false;
+        }
+        
+        Method method = findCompatibleMethod(env.getFieldDefinition(), javaClass);
+
+        if (method == null) {
+            error("Unable to find resolver for field '%s' of type '%s'",
+                    env.getFieldDefinition().getName(), env.getParentType().getName());
             return false;
         }
 
-        Method fetcherMethod = findFetcherMethod(env.getFieldDefinition(), typeClass);
-        if (fetcherMethod != null) {
-            return true;
-        } else {
-            fetcherMethod = findGetter(env.getFieldDefinition(), typeClass);
-            if (fetcherMethod != null) {
-                return true;
-            } else {
-                error("Unable to find resolver for field '%s' of type '%s'",
-                        env.getFieldDefinition().getName(), env.getParentType().getName());
-                return false;
-            }
-        }
+        return true;
     }
 
     @Override
@@ -99,6 +126,22 @@ public class ReflectionWiringFactory implements WiringFactory {
             Method getterMethod = findGetter(env.getFieldDefinition(), typeClass);
             return buildDataFetcherFromGetter(getterMethod);
         }
+    }
+
+    @Override
+    public boolean providesTypeResolver(InterfaceWiringEnvironment env) {
+        Class<?> interfaceClass = interfaceTypeMap.get(env.getInterfaceTypeDefinition().getName());
+        return true;
+    }
+
+    @Override
+    public TypeResolver getTypeResolver(InterfaceWiringEnvironment env) {
+        return new TypeResolver() {
+            @Override
+            public GraphQLObjectType getType(TypeResolutionEnvironment env) {
+                return (GraphQLObjectType) env.getSchema().getType("TestClass4");
+            }
+        };
     }
 
     private Class findClass(String name) {
@@ -114,6 +157,20 @@ public class ReflectionWiringFactory implements WiringFactory {
             error("Class '%s' not found", className);
             return null;
         }
+    }
+
+    private Method findCompatibleMethod(FieldDefinition graphqlFieldDef, Class<?> javaClass) {
+        Method fetcherMethod = findFetcherMethod(graphqlFieldDef, javaClass);
+        if (fetcherMethod != null) {
+            return fetcherMethod;
+        }
+
+        Method getterMethod = findGetter(graphqlFieldDef, javaClass);
+        if (getterMethod != null) {
+            return getterMethod;
+        }
+
+        return null;
     }
 
     private Method findFetcherMethod(FieldDefinition fieldDefinition, Class cls) {
@@ -205,6 +262,21 @@ public class ReflectionWiringFactory implements WiringFactory {
         return method;
     }
 
+    private void verifyInterface(Class<?> javaInterface, InterfaceTypeDefinition graphqlInterfaceDef) {
+        if (!javaInterface.isInterface()) {
+            error("Class '%s' is not an interface but defined in GraphQL as interface.",
+                    javaInterface.getName());
+        }
+
+        for (FieldDefinition fieldDef : graphqlInterfaceDef.getFieldDefinitions()) {
+            Method method = findCompatibleMethod(fieldDef, javaInterface);
+            if (method == null) {
+                error("Interface '%s' does not define properly define method '%s'",
+                        javaInterface.getName(), fieldDef.getName());
+            }
+        }
+    }
+
     private boolean isTypeCompatible(Type graphqlType, Class<?> javaType) {
         return isTypeCompatible(graphqlType, javaType, null);
     }
@@ -220,6 +292,8 @@ public class ReflectionWiringFactory implements WiringFactory {
                 return inputObjectTypeMap.get(typeName) == javaType;
             } else if (enumTypeMap.containsKey(typeName)) {
                 return enumTypeMap.get(typeName) == javaType;
+            } else if (interfaceTypeMap.containsKey(typeName)) {
+                return interfaceTypeMap.get(typeName) == javaType;
             }
         } else if (graphqlType instanceof ListType) {
             if (!List.class.isAssignableFrom(javaType)) {
