@@ -233,7 +233,7 @@ public class ReflectionWiringFactory implements WiringFactory {
     }
 
     private Method findPublicMethod(Class cls, String methodName, Type fieldReturnType) {
-        List<Method> matchingMethods = Arrays.stream(cls.getDeclaredMethods())
+        List<Method> matchingMethods = Arrays.stream(cls.getMethods())
                 .filter(m -> m.getName().equals(methodName))
                 .collect(Collectors.toList());
 
@@ -248,11 +248,6 @@ public class ReflectionWiringFactory implements WiringFactory {
 
         Method method = matchingMethods.get(0);
 
-        if (!Modifier.isPublic(method.getModifiers())) {
-            error("Method '%s' in class '%s' is not public", methodName, cls.getName());
-            return null;
-        }
-
         if (!isTypeCompatible(fieldReturnType, method.getReturnType(), method.getAnnotatedReturnType())) {
             error("Method '%s' in class '%s' returns '%s' instead of expected '%s'",
                     methodName, cls.getName(), method.getReturnType().getName(), fieldReturnType);
@@ -264,7 +259,7 @@ public class ReflectionWiringFactory implements WiringFactory {
 
     private void verifyInterface(Class<?> javaInterface, InterfaceTypeDefinition graphqlInterfaceDef) {
         if (!javaInterface.isInterface()) {
-            error("Class '%s' is not an interface but defined in GraphQL as interface.",
+            error("Class '%s' is not an interface but defined in GraphQL as interface",
                     javaInterface.getName());
         }
 

@@ -224,9 +224,9 @@ public class ReflectionWiringFactoryTest {
                         "    type TestClass1 {                                    \n" +
                         "        someField: Float                                 \n" +
                         "    }");
-        assertEquals(2, wiringFactory.getErrors().size());
+        assertEquals(1, wiringFactory.getErrors().size());
         assertEquals(
-                "Method 'getSomeField' in class 'wiringtests.TestClass1' is not public",
+                "Unable to find resolver for field 'someField' of type 'TestClass1'",
                 wiringFactory.getErrors().get(0));
     }
 
@@ -240,9 +240,9 @@ public class ReflectionWiringFactoryTest {
                         "    type TestClass1 {                                    \n" +
                         "        field1: Boolean                                  \n" +
                         "    }");
-        assertEquals(2, wiringFactory.getErrors().size());
+        assertEquals(1, wiringFactory.getErrors().size());
         assertEquals(
-                "Method 'fetchField1' in class 'wiringtests.TestClass1' is not public",
+                "Unable to find resolver for field 'field1' of type 'TestClass1'",
                 wiringFactory.getErrors().get(0));
     }
 
@@ -320,6 +320,55 @@ public class ReflectionWiringFactoryTest {
                 wiringFactory.getErrors().get(0));
     }
 
+    @Test
+    public void interfaceDoesNotDefineMethod() throws Exception {
+        ReflectionWiringFactory wiringFactory = wireSchema("" +
+                "    schema {                                             \n" +
+                "        query: TestClass3                                \n" +
+                "    }                                                    \n" +
+                "                                                         \n" +
+                "    type TestClass3 {                                    \n" +
+                "        interfaceField: TestInterface                    \n" +
+                "    }                                                    \n" +
+                "                                                         \n" +
+                "    interface TestInterface {                            \n" +
+                "        field2: Int                                      \n" +
+                "    }                                                    \n" +
+                "                                                         \n" +
+                "    type TestClass5 implements TestInterface {           \n" +
+                "        field1: String                                   \n" +
+                "        field2: Int                                      \n" +
+                "    }");
+        assertEquals(1, wiringFactory.getErrors().size());
+        assertEquals(
+                "Interface 'wiringtests.TestInterface' does not define properly define method 'field2'",
+                wiringFactory.getErrors().get(0));
+    }
+
+    @Test
+    public void classIsNotInterface() throws Exception {
+        ReflectionWiringFactory wiringFactory = wireSchema("" +
+                "    schema {                                             \n" +
+                "        query: TestClass3                                \n" +
+                "    }                                                    \n" +
+                "                                                         \n" +
+                "    type TestClass3 {                                    \n" +
+                "        testClass6: TestClass6                           \n" +
+                "    }                                                    \n" +
+                "                                                         \n" +
+                "    interface TestClass6 {                               \n" +
+                "        field1: String                                   \n" +
+                "    }                                                    \n" +
+                "                                                         \n" +
+                "    type TestClass5 implements TestClass6 {              \n" +
+                "        field1: String                                   \n" +
+                "        field2: Int                                      \n" +
+                "    }");
+        assertEquals(1, wiringFactory.getErrors().size());
+        assertEquals(
+                "Class 'wiringtests.TestClass6' is not an interface but defined in GraphQL as interface",
+                wiringFactory.getErrors().get(0));
+    }
 
     @Test
     public void resolveSimpleFields() throws Exception {
