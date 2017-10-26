@@ -537,4 +537,29 @@ public class ReflectionWiringFactoryTest {
                 "{enumReturn=ONE}",
                 result);
     }
+
+    @Test
+    public void resolveInterfaceReturn() throws Exception {
+        String result = executeQuery("" +
+                "    schema {                                             \n" +
+                "        query: TestClass3                                \n" +
+                "    }                                                    \n" +
+                "                                                         \n" +
+                "    type TestClass3 {                                    \n" +
+                "        interfaceField2: TestInterface2                  \n" +
+                "    }                                                    \n" +
+                "                                                         \n" +
+                "    interface TestInterface2 {                           \n" +
+                "        stringField: String                              \n" +
+                "    }                                                    \n" +
+                "                                                         \n" +
+                "    type TestClass7 implements TestInterface2 {          \n" +
+                "        stringField: String                              \n" +
+                "        intField: Int                                    \n" +
+                "    }                                                    \n",
+                "{ interfaceField2 { stringField } }");
+        assertEquals(
+                "{interfaceField2={stringField=string}}",
+                result);
+    }
 }

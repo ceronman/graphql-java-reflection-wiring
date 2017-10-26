@@ -91,4 +91,8 @@ public class TestClass3 {
     public static TestClass6 fetchTestClass6(DataFetchingEnvironment env) {
         return null;
     }
+
+    public static TestInterface2 fetchInterfaceField2(DataFetchingEnvironment env) {
+        return new TestClass7();
+    }
 }

@@ -1,5 +1,3 @@
-import graphql.Assert;
-import graphql.TypeResolutionEnvironment;
 import graphql.language.*;
 import graphql.language.Type;
 import graphql.schema.DataFetcher;
@@ -13,6 +11,7 @@ import graphql.schema.idl.WiringFactory;
 
 import java.lang.reflect.*;
 import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class ReflectionWiringFactory implements WiringFactory {
@@ -24,7 +23,7 @@ public class ReflectionWiringFactory implements WiringFactory {
     private final Map<String, Class<?>> inputObjectTypeMap;
     private final Map<String, Class<? extends Enum>> enumTypeMap;
     private final Map<String, Class<?>> interfaceTypeMap;
-    private final Map<String, Set<String>> interfaceImplementsMap;
+    private final Map<String, Set<String>> interfacesImplemented;
 
     public List<String> getErrors() {
         return errors;
@@ -38,7 +37,7 @@ public class ReflectionWiringFactory implements WiringFactory {
         scalarTypeMap = new HashMap<>();
         enumTypeMap = new HashMap<>();
         interfaceTypeMap = new HashMap<>();
-        interfaceImplementsMap = new HashMap<>();
+        interfacesImplemented = new HashMap<>();
 
         scalarTypeMap.put("Boolean", new HashSet<>(Arrays.asList(Boolean.class, boolean.class)));
         scalarTypeMap.put("Int", new HashSet<>(Arrays.asList(Integer.class, int.class)));
@@ -55,8 +54,8 @@ public class ReflectionWiringFactory implements WiringFactory {
                             .map(t -> ((TypeName) t).getName())
                             .collect(Collectors.toList());
                     if (impl.size() > 0) {
-                        interfaceImplementsMap.putIfAbsent(typeName, new HashSet<>());
-                        interfaceImplementsMap.get(typeName).addAll(impl);
+                        interfacesImplemented.putIfAbsent(typeName, new HashSet<>());
+                        interfacesImplemented.get(typeName).addAll(impl);
                     }
                 } else if (typeDef instanceof InputObjectTypeDefinition) {
                     inputObjectTypeMap.put(typeName, c);
@@ -86,7 +85,7 @@ public class ReflectionWiringFactory implements WiringFactory {
             }
         });
 
-        interfaceImplementsMap.forEach((className, interfaces) -> {
+        interfacesImplemented.forEach((className, interfaces) -> {
             Class<?> javaClass = objectTypeMap.get(className);
             for (String iface : interfaces) {
                 Class<?> javaInterface = interfaceTypeMap.get(iface);
@@ -130,18 +129,12 @@ public class ReflectionWiringFactory implements WiringFactory {
 
     @Override
     public boolean providesTypeResolver(InterfaceWiringEnvironment env) {
-        Class<?> interfaceClass = interfaceTypeMap.get(env.getInterfaceTypeDefinition().getName());
         return true;
     }
 
     @Override
     public TypeResolver getTypeResolver(InterfaceWiringEnvironment env) {
-        return new TypeResolver() {
-            @Override
-            public GraphQLObjectType getType(TypeResolutionEnvironment env) {
-                return (GraphQLObjectType) env.getSchema().getType("TestClass4");
-            }
-        };
+        return buildTypeResolver(env.getInterfaceTypeDefinition().getName());
     }
 
     private Class findClass(String name) {
@@ -370,6 +363,18 @@ public class ReflectionWiringFactory implements WiringFactory {
             } catch (Exception e) {
                 throw new RuntimeException("Error invoking data fetcher: " + e.toString(), e);
             }
+        };
+    }
+
+    private TypeResolver buildTypeResolver(String interfaceName) {
+        Map<Class<?>, String> implementingClasses = interfacesImplemented.keySet().stream()
+                .filter(c -> interfacesImplemented.get(c).contains(interfaceName))
+                .collect(Collectors.toMap(c -> objectTypeMap.get(c), Function.identity()));
+
+        return env -> {
+            Object javaObject = env.getObject();
+            String className = implementingClasses.get(javaObject.getClass());
+            return (GraphQLObjectType) env.getSchema().getType(className);
         };
     }
 
