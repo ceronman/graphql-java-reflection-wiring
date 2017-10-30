@@ -23,10 +23,10 @@ public class ReflectionWiringFactoryTest {
         return wiringFactory;
     }
 
-    private String executeQuery(String schema, String query) {
+    private String executeQuery(String pkg, String schema, String query) {
         SchemaParser schemaParser = new SchemaParser();
         TypeDefinitionRegistry typeDefinitionRegistry = schemaParser.parse(schema);
-        ReflectionWiringFactory wiringFactory = new ReflectionWiringFactory("wiringtests", typeDefinitionRegistry);
+        ReflectionWiringFactory wiringFactory = new ReflectionWiringFactory(pkg, typeDefinitionRegistry);
         RuntimeWiring runtimeWiring = newRuntimeWiring().wiringFactory(wiringFactory).build();
         SchemaGenerator schemaGenerator = new SchemaGenerator();
         GraphQLSchema graphQLSchema = schemaGenerator.makeExecutableSchema(typeDefinitionRegistry, runtimeWiring);
@@ -39,6 +39,10 @@ public class ReflectionWiringFactoryTest {
             throw new RuntimeException(error.toString());
         }
         return executionResult.getData().toString();
+    }
+
+    private String executeQuery(String schema, String query) {
+        return executeQuery("wiringtests", schema, query);
     }
 
     @Test
@@ -560,6 +564,36 @@ public class ReflectionWiringFactoryTest {
                 "{ interfaceField2 { stringField } }");
         assertEquals(
                 "{interfaceField2={stringField=string}}",
+                result);
+    }
+
+    @Test
+    public void resolveUnionReturn() throws Exception {
+        String result = executeQuery("uniontests", "" +
+                        "    schema {                                             \n" +
+                        "        query: UnionTestQuery                            \n" +
+                        "    }                                                    \n" +
+                        "                                                         \n" +
+                        "    type UnionTestQuery {                                \n" +
+                        "        unionFieldA: TestUnion                           \n" +
+                        "        unionFieldB: TestUnion                           \n" +
+                        "    }                                                    \n" +
+                        "                                                         \n" +
+                        "    union TestUnion = TypeA | TypeB                      \n" +
+                        "                                                         \n" +
+                        "    type TypeA {                                         \n" +
+                        "        stringField: String                              \n" +
+                        "    }                                                    \n" +
+                        "                                                         \n" +
+                        "    type TypeB {                                         \n" +
+                        "        intField: Int                                    \n" +
+                        "    }                                                    \n",
+                "{ unionFieldA{ ... on TypeA { stringField }, " +
+                        "              ... on TypeB { intField } }," +
+                        " unionFieldB{ ... on TypeA { stringField }, " +
+                        "              ... on TypeB { intField } } }");
+        assertEquals(
+                "{unionFieldA={stringField=string}, unionFieldB={intField=42}}",
                 result);
     }
 }

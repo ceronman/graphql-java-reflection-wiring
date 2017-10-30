@@ -1,13 +1,11 @@
+import graphql.Assert;
 import graphql.language.*;
 import graphql.language.Type;
 import graphql.schema.DataFetcher;
 import graphql.schema.DataFetchingEnvironment;
 import graphql.schema.GraphQLObjectType;
 import graphql.schema.TypeResolver;
-import graphql.schema.idl.FieldWiringEnvironment;
-import graphql.schema.idl.InterfaceWiringEnvironment;
-import graphql.schema.idl.TypeDefinitionRegistry;
-import graphql.schema.idl.WiringFactory;
+import graphql.schema.idl.*;
 
 import java.lang.reflect.*;
 import java.util.*;
@@ -81,6 +79,15 @@ public class ReflectionWiringFactory implements WiringFactory {
                 } else if (typeDef instanceof InterfaceTypeDefinition) {
                     interfaceTypeMap.put(typeName, c);
                     verifyInterface(c, (InterfaceTypeDefinition) typeDef);
+                } else if (typeDef instanceof UnionTypeDefinition) {
+                    interfaceTypeMap.put(typeName, c);
+                    verifyUnion(c, (UnionTypeDefinition) typeDef);
+
+                    for (Type member : ((UnionTypeDefinition) typeDef).getMemberTypes()) {
+                        String memberName = ((TypeName) member).getName();
+                        interfacesImplemented.putIfAbsent(memberName, new HashSet<>());
+                        interfacesImplemented.get(memberName).add(typeDef.getName());
+                    }
                 }
             }
         });
@@ -136,6 +143,17 @@ public class ReflectionWiringFactory implements WiringFactory {
     public TypeResolver getTypeResolver(InterfaceWiringEnvironment env) {
         return buildTypeResolver(env.getInterfaceTypeDefinition().getName());
     }
+
+    @Override
+    public boolean providesTypeResolver(UnionWiringEnvironment environment) {
+        return true;
+    }
+
+    @Override
+    public TypeResolver getTypeResolver(UnionWiringEnvironment env) {
+        return buildTypeResolver(env.getUnionTypeDefinition().getName());
+    }
+
 
     private Class findClass(String name) {
         String className = resolverPackage + "." + name;
@@ -264,6 +282,18 @@ public class ReflectionWiringFactory implements WiringFactory {
             }
         }
     }
+
+    private void verifyUnion(Class<?> javaInterface, UnionTypeDefinition graphqlUnionDef) {
+        if (!javaInterface.isInterface()) {
+            error("Class '%s' is not an interface but defined in GraphQL as Union",
+                    javaInterface.getName());
+        }
+
+        if (javaInterface.getMethods().length != 0) {
+            error("Interface '%s' should not have methods, it's mapped as a GraphQL Union");
+        }
+    }
+
 
     private boolean isTypeCompatible(Type graphqlType, Class<?> javaType) {
         return isTypeCompatible(graphqlType, javaType, null);
