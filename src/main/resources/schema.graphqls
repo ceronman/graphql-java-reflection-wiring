@@ -4,18 +4,21 @@ schema {
 
 type RootQuery {
     hotel(id: Int): Hotel
-    hello: String
-    world: String
 }
 
-# A resolvers.Hotel Type
 type Hotel {
     id: Int!
     name: String
+    rooms: [Room]
 }
 
-# A Room Type
 type Room {
+    id: Int!
+    name: String
+    facilities: [Facility]
+}
+
+type Facility {
     id: Int!
     name: String
 }
