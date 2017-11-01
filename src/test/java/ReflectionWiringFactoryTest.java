@@ -14,9 +14,13 @@ import static org.junit.Assert.*;
 public class ReflectionWiringFactoryTest {
 
     private ReflectionWiringFactory wireSchema(String schema) {
+        return wireSchema("wiringtests", schema);
+    }
+
+    private ReflectionWiringFactory wireSchema(String pkg, String schema) {
         SchemaParser schemaParser = new SchemaParser();
         TypeDefinitionRegistry typeDefinitionRegistry = schemaParser.parse(schema);
-        ReflectionWiringFactory wiringFactory = new ReflectionWiringFactory("wiringtests", typeDefinitionRegistry);
+        ReflectionWiringFactory wiringFactory = new ReflectionWiringFactory(pkg, typeDefinitionRegistry);
         RuntimeWiring runtimeWiring = newRuntimeWiring().wiringFactory(wiringFactory).build();
         SchemaGenerator schemaGenerator = new SchemaGenerator();
         GraphQLSchema graphQLSchema = schemaGenerator.makeExecutableSchema(typeDefinitionRegistry, runtimeWiring);
@@ -371,6 +375,61 @@ public class ReflectionWiringFactoryTest {
         assertEquals(1, wiringFactory.getErrors().size());
         assertEquals(
                 "Class 'wiringtests.TestClass6' is not an interface but defined in GraphQL as interface",
+                wiringFactory.getErrors().get(0));
+    }
+
+    @Test
+    public void unionIsNotInterface() throws Exception {
+        ReflectionWiringFactory wiringFactory = wireSchema("uniontests", "" +
+                        "    schema {                                             \n" +
+                        "        query: UnionTestQuery                            \n" +
+                        "    }                                                    \n" +
+                        "                                                         \n" +
+                        "    type UnionTestQuery {                                \n" +
+                        "        unionFieldA: NotClassUnion                       \n" +
+                        "        unionFieldB: NotClassUnion                       \n" +
+                        "    }                                                    \n" +
+                        "                                                         \n" +
+                        "    union NotClassUnion = TypeA | TypeB                  \n" +
+                        "                                                         \n" +
+                        "    type TypeA {                                         \n" +
+                        "        stringField: String                              \n" +
+                        "    }                                                    \n" +
+                        "                                                         \n" +
+                        "    type TypeB {                                         \n" +
+                        "        intField: Int                                    \n" +
+                        "    }");
+        assertEquals(8, wiringFactory.getErrors().size());
+        assertEquals(
+                "Class 'uniontests.NotClassUnion' is not an interface but defined in GraphQL as Union",
+                wiringFactory.getErrors().get(0));
+    }
+
+    @Test
+    public void unionInterfaceWithMethods() throws Exception {
+        ReflectionWiringFactory wiringFactory = wireSchema("uniontests", "" +
+                "    schema {                                             \n" +
+                "        query: BadUnionTestQuery                         \n" +
+                "    }                                                    \n" +
+                "                                                         \n" +
+                "    type BadUnionTestQuery {                             \n" +
+                "        unionFieldA: InterfaceWithMethodsUnion           \n" +
+                "        unionFieldB: InterfaceWithMethodsUnion           \n" +
+                "    }                                                    \n" +
+                "                                                         \n" +
+                "    union InterfaceWithMethodsUnion = BadTypeA | BadTypeB\n" +
+                "                                                         \n" +
+                "    type BadTypeA {                                      \n" +
+                "        stringField: String                              \n" +
+                "    }                                                    \n" +
+                "                                                         \n" +
+                "    type BadTypeB {                                      \n" +
+                "        intField: Int                                    \n" +
+                "    }");
+        assertEquals(1, wiringFactory.getErrors().size());
+        assertEquals(
+                "Interface 'uniontests.InterfaceWithMethodsUnion' should not have methods, " +
+                        "it's mapped as a GraphQL Union",
                 wiringFactory.getErrors().get(0));
     }
 

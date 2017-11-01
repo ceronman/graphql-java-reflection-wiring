@@ -290,7 +290,8 @@ public class ReflectionWiringFactory implements WiringFactory {
         }
 
         if (javaInterface.getMethods().length != 0) {
-            error("Interface '%s' should not have methods, it's mapped as a GraphQL Union");
+            error("Interface '%s' should not have methods, it's mapped as a GraphQL Union",
+                    javaInterface.getName());
         }
     }
 
