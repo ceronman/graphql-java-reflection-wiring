@@ -324,7 +324,7 @@ public class ReflectionWiringFactoryTest {
                 "    }");
         assertEquals(1, wiringFactory.getErrors().size());
         assertEquals(
-                "Class 'wiringtests.TestClass4' does not implement interface 'wiringtests.TestInterface'",
+                "Class 'wiringtests.TestClass4' does not implement interface 'TestInterface'",
                 wiringFactory.getErrors().get(0));
     }
 
@@ -382,26 +382,26 @@ public class ReflectionWiringFactoryTest {
     public void unionIsNotInterface() throws Exception {
         ReflectionWiringFactory wiringFactory = wireSchema("uniontests", "" +
                         "    schema {                                             \n" +
-                        "        query: UnionTestQuery                            \n" +
+                        "        query: NotInterfaceUnionQuery                    \n" +
                         "    }                                                    \n" +
                         "                                                         \n" +
-                        "    type UnionTestQuery {                                \n" +
-                        "        unionFieldA: NotClassUnion                       \n" +
-                        "        unionFieldB: NotClassUnion                       \n" +
+                        "    type NotInterfaceUnionQuery {                        \n" +
+                        "        unionFieldA: NotInterfaceUnion                   \n" +
+                        "        unionFieldB: NotInterfaceUnion                   \n" +
                         "    }                                                    \n" +
                         "                                                         \n" +
-                        "    union NotClassUnion = TypeA | TypeB                  \n" +
+                        "    union NotInterfaceUnion = TypeC | TypeD              \n" +
                         "                                                         \n" +
-                        "    type TypeA {                                         \n" +
+                        "    type TypeC {                                         \n" +
                         "        stringField: String                              \n" +
                         "    }                                                    \n" +
                         "                                                         \n" +
-                        "    type TypeB {                                         \n" +
+                        "    type TypeD {                                         \n" +
                         "        intField: Int                                    \n" +
                         "    }");
-        assertEquals(8, wiringFactory.getErrors().size());
+        assertEquals(1, wiringFactory.getErrors().size());
         assertEquals(
-                "Class 'uniontests.NotClassUnion' is not an interface but defined in GraphQL as Union",
+                "Class 'uniontests.NotInterfaceUnion' is not an interface but defined in GraphQL as Union",
                 wiringFactory.getErrors().get(0));
     }
 

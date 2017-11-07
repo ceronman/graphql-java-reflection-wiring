@@ -1,4 +1,3 @@
-import graphql.Assert;
 import graphql.language.*;
 import graphql.language.Type;
 import graphql.schema.DataFetcher;
@@ -19,124 +18,53 @@ public class ReflectionWiringFactory implements WiringFactory {
     private final Map<String, Set<Class<?>>> scalarTypeMap;
     private final Map<String, Class<?>> objectTypeMap;
     private final Map<String, Class<?>> inputObjectTypeMap;
-    private final Map<String, Class<? extends Enum>> enumTypeMap;
+    private final Map<String, Class<?>> enumTypeMap;
     private final Map<String, Class<?>> interfaceTypeMap;
     private final Map<String, Set<String>> interfacesImplemented;
-
-    public List<String> getErrors() {
-        return errors;
-    }
+    private final Map<String, Map<String, Method>> resolverMap;
 
     public ReflectionWiringFactory(String resolverPackage, TypeDefinitionRegistry registry) {
         this.resolverPackage = resolverPackage;
         errors = new ArrayList<>();
         objectTypeMap = new HashMap<>();
         inputObjectTypeMap = new HashMap<>();
-        scalarTypeMap = new HashMap<>();
         enumTypeMap = new HashMap<>();
         interfaceTypeMap = new HashMap<>();
         interfacesImplemented = new HashMap<>();
+        resolverMap = new HashMap<>();
 
+        scalarTypeMap = new HashMap<>();
         scalarTypeMap.put("Boolean", new HashSet<>(Arrays.asList(Boolean.class, boolean.class)));
         scalarTypeMap.put("Int", new HashSet<>(Arrays.asList(Integer.class, int.class)));
         scalarTypeMap.put("Float", new HashSet<>(Arrays.asList(Float.class, float.class, Double.class, double.class)));
-        scalarTypeMap.put("String", new HashSet<>(Arrays.asList(String.class)));
-        scalarTypeMap.put("ID", new HashSet<>(Arrays.asList(String.class)));
+        scalarTypeMap.put("String", new HashSet<>(Collections.singletonList(String.class)));
+        scalarTypeMap.put("ID", new HashSet<>(Collections.singletonList(String.class)));
 
-        registry.types().forEach((typeName, typeDef) -> {
-            Class<?> c = findClass(typeName);
-            if (c != null) {
-                if (typeDef instanceof ObjectTypeDefinition) {
-                    objectTypeMap.put(typeName, c);
-                    List<String> impl = ((ObjectTypeDefinition) typeDef).getImplements().stream()
-                            .map(t -> ((TypeName) t).getName())
-                            .collect(Collectors.toList());
-                    if (impl.size() > 0) {
-                        interfacesImplemented.putIfAbsent(typeName, new HashSet<>());
-                        interfacesImplemented.get(typeName).addAll(impl);
-                    }
-                } else if (typeDef instanceof InputObjectTypeDefinition) {
-                    inputObjectTypeMap.put(typeName, c);
-                    findInputTypeConstructor(c); // TODO: Find better way of doing validation here.
-                } else if (typeDef instanceof EnumTypeDefinition) {
-                    if (!c.isEnum()) {
-                        error("Class '%s' is not Enum", c.getName());
-                        return;
-                    }
-                    Class<? extends Enum> e = (Class<? extends Enum>) c;
-                    Set<String> graphqlEnumNames = ((EnumTypeDefinition) typeDef).getEnumValueDefinitions().stream()
-                            .map(EnumValueDefinition::getName)
-                            .collect(Collectors.toSet());
-                    Set<String> javaEnumNames = Arrays.stream(e.getEnumConstants())
-                            .map(Enum::name)
-                            .collect(Collectors.toSet());
-                    if (!graphqlEnumNames.equals(javaEnumNames)) {
-                        error("Enum '%s' doesn't have the same values as '%s'",
-                                e.getName(), typeDef.getName());
-                        return;
-                    }
-                    enumTypeMap.put(typeName, e);
-                } else if (typeDef instanceof InterfaceTypeDefinition) {
-                    interfaceTypeMap.put(typeName, c);
-                    verifyInterface(c, (InterfaceTypeDefinition) typeDef);
-                } else if (typeDef instanceof UnionTypeDefinition) {
-                    interfaceTypeMap.put(typeName, c);
-                    verifyUnion(c, (UnionTypeDefinition) typeDef);
-
-                    for (Type member : ((UnionTypeDefinition) typeDef).getMemberTypes()) {
-                        String memberName = ((TypeName) member).getName();
-                        interfacesImplemented.putIfAbsent(memberName, new HashSet<>());
-                        interfacesImplemented.get(memberName).add(typeDef.getName());
-                    }
-                }
-            }
-        });
-
-        interfacesImplemented.forEach((className, interfaces) -> {
-            Class<?> javaClass = objectTypeMap.get(className);
-            for (String iface : interfaces) {
-                Class<?> javaInterface = interfaceTypeMap.get(iface);
-                if (!javaInterface.isAssignableFrom(javaClass)) {
-                    error("Class '%s' does not implement interface '%s'",
-                            javaClass.getName(), javaInterface.getName());
-                }
-            }
-        });
+        findClassesFromPackage(resolverPackage, registry.types().values());
+        verifyClasses(registry.types().values());
     }
 
     @Override
     public boolean providesDataFetcher(FieldWiringEnvironment env) {
-        Class javaClass = objectTypeMap.get(env.getParentType().getName());
-        if (javaClass == null) {
-            return false;
-        }
-        
-        Method method = findCompatibleMethod(env.getFieldDefinition(), javaClass);
-
-        if (method == null) {
-            error("Unable to find resolver for field '%s' of type '%s'",
-                    env.getFieldDefinition().getName(), env.getParentType().getName());
-            return false;
-        }
-
-        return true;
+        String typeName = env.getParentType().getName();
+        String fieldName = env.getFieldDefinition().getName();
+        return resolverMap.containsKey(typeName) && resolverMap.get(typeName).containsKey(fieldName);
     }
 
     @Override
     public DataFetcher getDataFetcher(FieldWiringEnvironment env) {
-        Class typeClass = objectTypeMap.get(env.getParentType().getName());
-        Method fetcherMethod = findFetcherMethod(env.getFieldDefinition(), typeClass);
-        if (fetcherMethod != null) {
-            return buildDataFetcherFromMethod(fetcherMethod, env.getFieldDefinition().getInputValueDefinitions());
+        Method method = resolverMap.get(env.getParentType().getName()).get(env.getFieldDefinition().getName());
+
+        if (method.getName().startsWith("fetch")) {
+            return buildDataFetcherFromMethod(method, env.getFieldDefinition().getInputValueDefinitions());
         } else {
-            Method getterMethod = findGetter(env.getFieldDefinition(), typeClass);
-            return buildDataFetcherFromGetter(getterMethod);
+            return buildDataFetcherFromGetter(method);
         }
     }
 
     @Override
     public boolean providesTypeResolver(InterfaceWiringEnvironment env) {
-        return true;
+        return interfaceTypeMap.containsKey(env.getInterfaceTypeDefinition().getName());
     }
 
     @Override
@@ -145,8 +73,8 @@ public class ReflectionWiringFactory implements WiringFactory {
     }
 
     @Override
-    public boolean providesTypeResolver(UnionWiringEnvironment environment) {
-        return true;
+    public boolean providesTypeResolver(UnionWiringEnvironment env) {
+        return interfaceTypeMap.containsKey(env.getUnionTypeDefinition().getName());
     }
 
     @Override
@@ -154,19 +82,169 @@ public class ReflectionWiringFactory implements WiringFactory {
         return buildTypeResolver(env.getUnionTypeDefinition().getName());
     }
 
+    public List<String> getErrors() {
+        return errors;
+    }
 
-    private Class findClass(String name) {
-        String className = resolverPackage + "." + name;
-        try {
-            Class typeClass = Class.forName(className);
-            if (!Modifier.isPublic(typeClass.getModifiers())) {
-                error("Class '%s' is not public", typeClass.getName());
-                return null;
+    private void findClassesFromPackage(String packageName, Collection<TypeDefinition> graphqlTypes) {
+        for (TypeDefinition typeDef : graphqlTypes) {
+
+            Class<?> javaClass;
+            String className = packageName + "." + typeDef.getName();
+            try {
+                javaClass = Class.forName(className);
+                if (!Modifier.isPublic(javaClass.getModifiers())) {
+                    error("Class '%s' is not public", javaClass.getName());
+                    continue;
+                }
+            } catch (ClassNotFoundException e) {
+                error("Class '%s' not found", className);
+                continue;
             }
-            return typeClass;
-        } catch (ClassNotFoundException e) {
-            error("Class '%s' not found", className);
-            return null;
+
+            if (typeDef instanceof ObjectTypeDefinition) {
+                objectTypeMap.put(typeDef.getName(), javaClass);
+
+                List<String> implementedInterfaces = ((ObjectTypeDefinition) typeDef).getImplements().stream()
+                        .map(t -> ((TypeName) t).getName())
+                        .collect(Collectors.toList());
+                if (implementedInterfaces.size() > 0) {
+                    interfacesImplemented.putIfAbsent(typeDef.getName(), new HashSet<>());
+                    interfacesImplemented.get(typeDef.getName()).addAll(implementedInterfaces);
+                }
+            } else if (typeDef instanceof InputObjectTypeDefinition) {
+                inputObjectTypeMap.put(typeDef.getName(), javaClass);
+            } else if (typeDef instanceof EnumTypeDefinition) {
+                enumTypeMap.put(typeDef.getName(), javaClass);
+            } else if (typeDef instanceof InterfaceTypeDefinition) {
+                interfaceTypeMap.put(typeDef.getName(), javaClass);
+            } else if (typeDef instanceof UnionTypeDefinition) {
+                interfaceTypeMap.put(typeDef.getName(), javaClass);
+
+                for (Type member : ((UnionTypeDefinition) typeDef).getMemberTypes()) {
+                    String memberName = ((TypeName) member).getName();
+                    interfacesImplemented.putIfAbsent(memberName, new HashSet<>());
+                    interfacesImplemented.get(memberName).add(typeDef.getName());
+                }
+            }
+        }
+    }
+
+    private void verifyClasses(Collection<TypeDefinition> graphqlTypes) {
+        for (TypeDefinition typeDef : graphqlTypes) {
+            if (typeDef instanceof ObjectTypeDefinition) {
+                verifyObjectType((ObjectTypeDefinition) typeDef);
+            } else if (typeDef instanceof UnionTypeDefinition) {
+                verifyUnionType((UnionTypeDefinition)typeDef);
+            } else if (typeDef instanceof InputObjectTypeDefinition) {
+                verifyInputObjectType((InputObjectTypeDefinition) typeDef);
+            } else if (typeDef instanceof EnumTypeDefinition) {
+                verifyEnumType((EnumTypeDefinition) typeDef);
+            } else if (typeDef instanceof InterfaceTypeDefinition) {
+                verifyInterfaceType((InterfaceTypeDefinition) typeDef);
+            }
+        }
+    }
+
+    private void verifyObjectType(ObjectTypeDefinition graphqlObjectTypeDef) {
+        String typeName = graphqlObjectTypeDef.getName();
+        Class<?> javaClass = objectTypeMap.get(typeName);
+
+        if (javaClass == null) {
+            return;
+        }
+
+        for (FieldDefinition fieldDef : graphqlObjectTypeDef.getFieldDefinitions()) {
+            Method method = findCompatibleMethod(fieldDef, javaClass);
+
+            if (method == null) {
+                error("Unable to find resolver for field '%s' of type '%s'",
+                        fieldDef.getName(), typeName);
+                continue;
+            }
+
+            resolverMap.putIfAbsent(typeName, new HashMap<>());
+            resolverMap.get(typeName).put(fieldDef.getName(), method);
+        }
+
+        for (String interfaceName : interfacesImplemented.getOrDefault(typeName, Collections.emptySet())) {
+            Class<?> javaInterface = interfaceTypeMap.get(interfaceName);
+            if (javaInterface == null || !javaInterface.isAssignableFrom(javaClass)) {
+                error("Class '%s' does not implement interface '%s'",
+                        javaClass.getName(), interfaceName);
+            }
+        }
+    }
+
+    private void verifyInterfaceType(InterfaceTypeDefinition graphqlInterfaceDef) {
+        Class<?> javaInterface = interfaceTypeMap.get(graphqlInterfaceDef.getName());
+
+        if (!javaInterface.isInterface()) {
+            error("Class '%s' is not an interface but defined in GraphQL as interface",
+                    javaInterface.getName());
+            return;
+        }
+
+        for (FieldDefinition fieldDef : graphqlInterfaceDef.getFieldDefinitions()) {
+            Method method = findCompatibleMethod(fieldDef, javaInterface);
+            if (method == null) {
+                error("Interface '%s' does not define properly define method '%s'",
+                        javaInterface.getName(), fieldDef.getName());
+                return;
+            }
+        }
+    }
+
+    private void verifyUnionType(UnionTypeDefinition graphqlUnionTypeDef) {
+        Class<?> javaUnion = interfaceTypeMap.get(graphqlUnionTypeDef.getName());
+
+        if (javaUnion == null) {
+            return;
+        }
+
+        if (!javaUnion.isInterface()) {
+            error("Class '%s' is not an interface but defined in GraphQL as Union",
+                    javaUnion.getName());
+            return;
+        }
+
+        if (javaUnion.getMethods().length != 0) {
+            error("Interface '%s' should not have methods, it's mapped as a GraphQL Union",
+                    javaUnion.getName());
+        }
+    }
+
+    private void verifyEnumType(EnumTypeDefinition graphqlEnumDef) {
+        Class<?> javaEnum = enumTypeMap.get(graphqlEnumDef.getName());
+
+        if (javaEnum == null) {
+            return;
+        }
+
+        if (!javaEnum.isEnum()) {
+            error("Class '%s' is not Enum", javaEnum.getName());
+            return;
+        }
+        @SuppressWarnings("unchecked")
+        Class<? extends Enum> e = (Class<? extends Enum>) javaEnum;
+        Set<String> graphqlEnumNames = graphqlEnumDef.getEnumValueDefinitions().stream()
+                .map(EnumValueDefinition::getName)
+                .collect(Collectors.toSet());
+        Set<String> javaEnumNames = Arrays.stream(e.getEnumConstants())
+                .map(Enum::name)
+                .collect(Collectors.toSet());
+        if (!graphqlEnumNames.equals(javaEnumNames)) {
+            error("Java Enum '%s' doesn't have the same values as GraphQL Enum '%s'",
+                    e.getName(), graphqlEnumDef.getName());
+        }
+    }
+
+    private void verifyInputObjectType(InputObjectTypeDefinition graphqlInputObjectDef) {
+        Class<?> javaClass = inputObjectTypeMap.get(graphqlInputObjectDef.getName());
+
+        // TODO: Validate that input object has complete fields
+        if (javaClass == null || findInputTypeConstructor(javaClass) == null) {
+            return;
         }
     }
 
@@ -184,10 +262,10 @@ public class ReflectionWiringFactory implements WiringFactory {
         return null;
     }
 
-    private Method findFetcherMethod(FieldDefinition fieldDefinition, Class cls) {
-        String fetcherName = buildFetcherName("fetch", fieldDefinition);
+    private Method findFetcherMethod(FieldDefinition graphqlFieldDef, Class cls) {
+        String fetcherName = buildFetcherName("fetch", graphqlFieldDef);
 
-        Method method = findPublicMethod(cls, fetcherName, fieldDefinition.getType());
+        Method method = findPublicMethod(cls, fetcherName, graphqlFieldDef.getType());
 
         if (method == null) {
             return null;
@@ -209,7 +287,7 @@ public class ReflectionWiringFactory implements WiringFactory {
             return null;
         }
 
-        List<InputValueDefinition> fieldParams = fieldDefinition.getInputValueDefinitions();
+        List<InputValueDefinition> fieldParams = graphqlFieldDef.getInputValueDefinitions();
 
         if (methodParams.size() != fieldParams.size()) {
             error("Method '%s' in class '%s' doesn't have the right number of arguments",
@@ -268,34 +346,6 @@ public class ReflectionWiringFactory implements WiringFactory {
         return method;
     }
 
-    private void verifyInterface(Class<?> javaInterface, InterfaceTypeDefinition graphqlInterfaceDef) {
-        if (!javaInterface.isInterface()) {
-            error("Class '%s' is not an interface but defined in GraphQL as interface",
-                    javaInterface.getName());
-        }
-
-        for (FieldDefinition fieldDef : graphqlInterfaceDef.getFieldDefinitions()) {
-            Method method = findCompatibleMethod(fieldDef, javaInterface);
-            if (method == null) {
-                error("Interface '%s' does not define properly define method '%s'",
-                        javaInterface.getName(), fieldDef.getName());
-            }
-        }
-    }
-
-    private void verifyUnion(Class<?> javaInterface, UnionTypeDefinition graphqlUnionDef) {
-        if (!javaInterface.isInterface()) {
-            error("Class '%s' is not an interface but defined in GraphQL as Union",
-                    javaInterface.getName());
-        }
-
-        if (javaInterface.getMethods().length != 0) {
-            error("Interface '%s' should not have methods, it's mapped as a GraphQL Union",
-                    javaInterface.getName());
-        }
-    }
-
-
     private boolean isTypeCompatible(Type graphqlType, Class<?> javaType) {
         return isTypeCompatible(graphqlType, javaType, null);
     }
@@ -349,7 +399,7 @@ public class ReflectionWiringFactory implements WiringFactory {
                 throw new RuntimeException("DataFetcher method doesn't have source.");
             }
 
-            List parameters = new ArrayList();
+            List<Object> parameters = new ArrayList<>();
             parameters.add(env);
 
             try {
@@ -366,7 +416,8 @@ public class ReflectionWiringFactory implements WiringFactory {
                             continue;
                         }
 
-                        Class<? extends Enum> enumType = enumTypeMap.get(fieldType.getName());
+                        @SuppressWarnings("unchecked")
+                        Class<? extends Enum> enumType = (Class<? extends Enum>) enumTypeMap.get(fieldType.getName());
                         if (enumType != null) {
                             Enum<?> parameter = Enum.valueOf(enumType, (String)paramValue);
                             parameters.add(parameter);
@@ -400,7 +451,7 @@ public class ReflectionWiringFactory implements WiringFactory {
     private TypeResolver buildTypeResolver(String interfaceName) {
         Map<Class<?>, String> implementingClasses = interfacesImplemented.keySet().stream()
                 .filter(c -> interfacesImplemented.get(c).contains(interfaceName))
-                .collect(Collectors.toMap(c -> objectTypeMap.get(c), Function.identity()));
+                .collect(Collectors.toMap(objectTypeMap::get, Function.identity()));
 
         return env -> {
             Object javaObject = env.getObject();

@@ -32,23 +32,18 @@ public class BatchedDataLoaderTest {
         RuntimeWiring wiring = buildRuntimeWiring();
         GraphQLSchema graphQLSchema = schemaGenerator.makeExecutableSchema(typeDefinitionRegistry, wiring);
 
-        BatchLoader<Integer, Object> facilityBatchLoader = new BatchLoader<Integer, Object>() {
-            @Override
-            public CompletionStage<List<Object>> load(List<Integer> keys) {
-                return CompletableFuture.supplyAsync(() -> {
-                    System.out.println("Fetching Facilities!");
-                    System.out.println(keys);
-                    List<Object> facilities = new ArrayList();
-                    for (int key : keys) {
-                        Map<String, Object>  facility = new HashMap<>();
-                        facility.put("id", key);
-                        facility.put("name", "Facility" + key);
-                        facilities.add((Object)facility);
-                    }
-                    return facilities;
-                });
+        BatchLoader<Integer, Object> facilityBatchLoader = keys -> CompletableFuture.supplyAsync(() -> {
+            System.out.println("Fetching Facilities!");
+            System.out.println(keys);
+            List<Object> facilities = new ArrayList<>();
+            for (int key : keys) {
+                Map<String, Object>  facility = new HashMap<>();
+                facility.put("id", key);
+                facility.put("name", "Facility" + key);
+                facilities.add((Object)facility);
             }
-        };
+            return facilities;
+        });
 
         DataLoader<Integer, Object> facilityDataLoader = new DataLoader<>(facilityBatchLoader);
         DataLoaderRegistry registry = new DataLoaderRegistry();
