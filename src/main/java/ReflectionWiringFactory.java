@@ -106,7 +106,7 @@ public class ReflectionWiringFactory implements WiringFactory {
                 objectTypeMap.put(typeDef.getName(), javaClass);
 
                 List<String> implementedInterfaces = ((ObjectTypeDefinition) typeDef).getImplements().stream()
-                        .map(t -> ((TypeName) t).getName())
+                        .map(t -> typeToString(t))
                         .collect(Collectors.toList());
                 if (implementedInterfaces.size() > 0) {
                     interfacesImplemented.putIfAbsent(typeDef.getName(), new HashSet<>());
@@ -122,7 +122,7 @@ public class ReflectionWiringFactory implements WiringFactory {
                 interfaceTypeMap.put(typeDef.getName(), javaClass);
 
                 for (Type member : ((UnionTypeDefinition) typeDef).getMemberTypes()) {
-                    String memberName = ((TypeName) member).getName();
+                    String memberName = typeToString(member);
                     interfacesImplemented.putIfAbsent(memberName, new HashSet<>());
                     interfacesImplemented.get(memberName).add(typeDef.getName());
                 }
@@ -339,7 +339,7 @@ public class ReflectionWiringFactory implements WiringFactory {
 
         if (!isTypeCompatible(fieldReturnType, method.getReturnType(), method.getAnnotatedReturnType())) {
             error("Method '%s' in class '%s' returns '%s' instead of expected '%s'",
-                    methodName, cls.getName(), method.getReturnType().getName(), fieldReturnType);
+                    methodName, cls.getName(), method.getReturnType().getName(), typeToString(fieldReturnType));
             return null;
         }
 
@@ -352,7 +352,7 @@ public class ReflectionWiringFactory implements WiringFactory {
 
     private boolean isTypeCompatible(Type graphqlType, Class<?> javaType, AnnotatedType javaAnnotatedType) {
         if (graphqlType instanceof TypeName) {
-            String typeName = ((TypeName) graphqlType).getName();
+            String typeName = typeToString(graphqlType);
             if (scalarTypeMap.containsKey(typeName)) {
                 return scalarTypeMap.getOrDefault(typeName, Collections.emptySet()).contains(javaType);
             } else if (objectTypeMap.containsKey(typeName)) {
@@ -384,6 +384,16 @@ public class ReflectionWiringFactory implements WiringFactory {
         return false;
     }
 
+    private String typeToString(Type graphqlType) {
+        if (graphqlType instanceof TypeName) {
+            return ((TypeName)graphqlType).getName();
+        } else if (graphqlType instanceof ListType) {
+            return String.format("[%s]", typeToString(((ListType)graphqlType).getType()));
+        } else {
+            throw new RuntimeException("Unknown type");
+        }
+    }
+
     private Constructor<?> findInputTypeConstructor(Class<?> inputType) {
         try {
             return inputType.getConstructor(Map.class);
@@ -406,9 +416,9 @@ public class ReflectionWiringFactory implements WiringFactory {
                 for (InputValueDefinition fieldParam : fieldParams) {
                     Object paramValue = env.getArgument(fieldParam.getName());
                     if (fieldParam.getType() instanceof TypeName) {
-                        TypeName fieldType = (TypeName) fieldParam.getType();
+                        String fieldName = typeToString(fieldParam.getType());
 
-                        Class<?> inputType = inputObjectTypeMap.get(fieldType.getName());
+                        Class<?> inputType = inputObjectTypeMap.get(fieldName);
                         if (inputType != null) {
                             Constructor<?> constructor = findInputTypeConstructor(inputType);
                             Object parameter = constructor.newInstance((Map) paramValue);
@@ -417,7 +427,7 @@ public class ReflectionWiringFactory implements WiringFactory {
                         }
 
                         @SuppressWarnings("unchecked")
-                        Class<? extends Enum> enumType = (Class<? extends Enum>) enumTypeMap.get(fieldType.getName());
+                        Class<? extends Enum> enumType = (Class<? extends Enum>) enumTypeMap.get(fieldName);
                         if (enumType != null) {
                             Enum<?> parameter = Enum.valueOf(enumType, (String)paramValue);
                             parameters.add(parameter);

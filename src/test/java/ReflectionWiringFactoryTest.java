@@ -94,7 +94,7 @@ public class ReflectionWiringFactoryTest {
         assertEquals(2, wiringFactory.getErrors().size());
         assertEquals(
                 "Method 'getIntField' in class 'wiringtests.TestClass1' returns 'int' instead of expected " +
-                        "'TypeName{name='String'}'",
+                        "'String'",
                 wiringFactory.getErrors().get(0));
     }
 
@@ -111,7 +111,7 @@ public class ReflectionWiringFactoryTest {
         assertEquals(2, wiringFactory.getErrors().size());
         assertEquals(
                 "Method 'fetchFloatField' in class 'wiringtests.TestClass1' returns 'float' instead of " +
-                        "expected 'TypeName{name='Boolean'}'",
+                        "expected 'Boolean'",
                 wiringFactory.getErrors().get(0));
     }
 
@@ -129,11 +129,11 @@ public class ReflectionWiringFactoryTest {
         assertEquals(4, wiringFactory.getErrors().size());
         assertEquals(
                 "Method 'fetchStreamField' in class 'wiringtests.TestClass1' returns " +
-                        "'java.util.stream.Stream' instead of expected 'ListType{type=TypeName{name='Int'}}'",
+                        "'java.util.stream.Stream' instead of expected '[Int]'",
                 wiringFactory.getErrors().get(0));
         assertEquals(
                 "Method 'fetchListField' in class 'wiringtests.TestClass1' returns " +
-                        "'java.util.List' instead of expected 'ListType{type=TypeName{name='Int'}}'",
+                        "'java.util.List' instead of expected '[Int]'",
                 wiringFactory.getErrors().get(2));
     }
 
