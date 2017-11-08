@@ -1,12 +1,19 @@
 import graphql.ExecutionResult;
 import graphql.GraphQL;
 import graphql.GraphQLError;
+import graphql.schema.DataFetchingEnvironment;
 import graphql.schema.GraphQLSchema;
 import graphql.schema.idl.RuntimeWiring;
 import graphql.schema.idl.SchemaGenerator;
 import graphql.schema.idl.SchemaParser;
 import graphql.schema.idl.TypeDefinitionRegistry;
 import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+import java.util.stream.Stream;
 
 import static graphql.schema.idl.RuntimeWiring.newRuntimeWiring;
 import static org.junit.Assert.*;
@@ -15,6 +22,16 @@ public class ReflectionWiringFactoryTest {
 
     private ReflectionWiringFactory wireSchema(String schema) {
         return wireSchema("wiringtests", schema);
+    }
+
+    private ReflectionWiringFactory wireSchema(Collection<Class<?>> classes, String schema) {
+        SchemaParser schemaParser = new SchemaParser();
+        TypeDefinitionRegistry typeDefinitionRegistry = schemaParser.parse(schema);
+        ReflectionWiringFactory wiringFactory = new ReflectionWiringFactory(typeDefinitionRegistry, classes);
+        RuntimeWiring runtimeWiring = newRuntimeWiring().wiringFactory(wiringFactory).build();
+        SchemaGenerator schemaGenerator = new SchemaGenerator();
+        schemaGenerator.makeExecutableSchema(typeDefinitionRegistry, runtimeWiring);
+        return wiringFactory;
     }
 
     private ReflectionWiringFactory wireSchema(String pkg, String schema) {
@@ -65,159 +82,185 @@ public class ReflectionWiringFactoryTest {
                 wiringFactory.getErrors().get(0));
     }
 
+    public class MissingFieldTest {
+    }
+
     @Test
     public void missingResolverError() throws Exception {
-        ReflectionWiringFactory wiringFactory = wireSchema("" +
+        ReflectionWiringFactory wiringFactory = wireSchema(
+                Collections.singletonList(MissingFieldTest.class), "" +
                         "    schema {                                             \n" +
-                        "        query: TestClass1                                \n" +
+                        "        query: MissingFieldTest                          \n" +
                         "    }                                                    \n" +
                         "                                                         \n" +
-                        "    type TestClass1 {                                    \n" +
+                        "    type MissingFieldTest {                              \n" +
                         "        hello: String                                    \n" +
                         "    }");
         assertEquals(1, wiringFactory.getErrors().size());
         assertEquals(
-                "Unable to find resolver for field 'hello' of type 'TestClass1'",
+                "Unable to find resolver for field 'hello' of type 'MissingFieldTest'",
                 wiringFactory.getErrors().get(0));
+    }
+
+    public class BadGetterReturnTypeTest {
+        public int getField() { return 1; }
     }
 
     @Test
     public void badGetterReturnTypeError() throws Exception {
-        ReflectionWiringFactory wiringFactory = wireSchema("" +
+        ReflectionWiringFactory wiringFactory = wireSchema(
+                Collections.singletonList(BadGetterReturnTypeTest.class), "" +
                         "    schema {                                             \n" +
-                        "        query: TestClass1                                \n" +
+                        "        query: BadGetterReturnTypeTest                   \n" +
                         "    }                                                    \n" +
                         "                                                         \n" +
-                        "    type TestClass1 {                                    \n" +
-                        "        intField: String                                 \n" +
+                        "    type BadGetterReturnTypeTest {                       \n" +
+                        "        field: String                                    \n" +
                         "    }");
         assertEquals(2, wiringFactory.getErrors().size());
         assertEquals(
-                "Method 'getIntField' in class 'TestClass1' returns 'int' instead of expected " +
-                        "'String'",
+                "Method 'getField' in class 'BadGetterReturnTypeTest' returns 'int' " +
+                        "instead of expected 'String'",
                 wiringFactory.getErrors().get(0));
+    }
+
+    public class BadFetcherReturnTypeTest {
+        public float fetchField(DataFetchingEnvironment env) { return 1.0f; }
     }
 
     @Test
     public void badFetcherReturnType() throws Exception {
-        ReflectionWiringFactory wiringFactory = wireSchema("" +
+        ReflectionWiringFactory wiringFactory = wireSchema(
+                Collections.singletonList(BadFetcherReturnTypeTest.class), "" +
                         "    schema {                                             \n" +
-                        "        query: TestClass1                                \n" +
+                        "        query: BadFetcherReturnTypeTest                  \n" +
                         "    }                                                    \n" +
                         "                                                         \n" +
-                        "    type TestClass1 {                                    \n" +
-                        "        floatField: Boolean                              \n" +
+                        "    type BadFetcherReturnTypeTest {                      \n" +
+                        "        field: Boolean                                   \n" +
                         "    }");
         assertEquals(2, wiringFactory.getErrors().size());
         assertEquals(
-                "Method 'fetchFloatField' in class 'TestClass1' returns 'float' instead of " +
-                        "expected 'Boolean'",
+                "Method 'fetchField' in class 'BadFetcherReturnTypeTest' returns 'float' " +
+                        "instead of expected 'Boolean'",
                 wiringFactory.getErrors().get(0));
+    }
+
+    public class BadListTest {
+        public Stream<Integer> fetchStreamField(DataFetchingEnvironment env) {
+            return Stream.of(1, 2, 3);
+        }
+        public List fetchListField(DataFetchingEnvironment env) {
+            return new ArrayList();
+        }
     }
 
     @Test
     public void badFetcherListReturnType() throws Exception {
-        ReflectionWiringFactory wiringFactory = wireSchema("" +
+        ReflectionWiringFactory wiringFactory = wireSchema(
+                Collections.singletonList(BadListTest.class), "" +
                         "    schema {                                             \n" +
-                        "        query: TestClass1                                \n" +
+                        "        query: BadListTest                               \n" +
                         "    }                                                    \n" +
                         "                                                         \n" +
-                        "    type TestClass1 {                                    \n" +
+                        "    type BadListTest {                                   \n" +
                         "        streamField: [Int]                               \n" +
                         "        listField: [Int]                                 \n" +
                         "    }");
         assertEquals(4, wiringFactory.getErrors().size());
         assertEquals(
-                "Method 'fetchStreamField' in class 'TestClass1' returns 'Stream' instead of expected '[Int]'",
+                "Method 'fetchStreamField' in class 'BadListTest' returns 'Stream' instead of expected '[Int]'",
                 wiringFactory.getErrors().get(0));
         assertEquals(
-                "Method 'fetchListField' in class 'TestClass1' returns 'List' instead of expected '[Int]'",
+                "Method 'fetchListField' in class 'BadListTest' returns 'List' instead of expected '[Int]'",
                 wiringFactory.getErrors().get(2));
+    }
+
+    public class NoEnvArgTest {
+        public boolean fetchField() { return true; }
     }
 
     @Test
     public void fetcherWithoutEnvArgument() throws Exception {
-        ReflectionWiringFactory wiringFactory = wireSchema("" +
+        ReflectionWiringFactory wiringFactory = wireSchema(
+                Collections.singletonList(NoEnvArgTest.class),
+                "" +
                         "    schema {                                             \n" +
-                        "        query: TestClass1                                \n" +
+                        "        query: NoEnvArgTest                              \n" +
                         "    }                                                    \n" +
                         "                                                         \n" +
-                        "    type TestClass1 {                                    \n" +
-                        "        noEnv: Boolean                                   \n" +
+                        "    type NoEnvArgTest {                                  \n" +
+                        "        field: Boolean                                   \n" +
                         "    }");
         assertEquals(2, wiringFactory.getErrors().size());
         assertEquals(
-                "Method 'fetchNoEnv' in class 'TestClass1' doesn't have DataFetchingEnvironment " +
+                "Method 'fetchField' in class 'NoEnvArgTest' doesn't have DataFetchingEnvironment " +
                         "as first parameter",
                 wiringFactory.getErrors().get(0));
     }
 
+    public class BadArgOrderTest {
+        public String fetchField(int arg, DataFetchingEnvironment env) {
+            return "";
+        }
+    }
+
     @Test
     public void fetcherBadArgumentOrder() throws Exception {
-        ReflectionWiringFactory wiringFactory = wireSchema("" +
+        ReflectionWiringFactory wiringFactory = wireSchema(
+                Collections.singletonList(BadArgOrderTest.class), "" +
                         "    schema {                                             \n" +
-                        "        query: TestClass1                                \n" +
+                        "        query: BadArgOrderTest                           \n" +
                         "    }                                                    \n" +
                         "                                                         \n" +
-                        "    type TestClass1 {                                    \n" +
-                        "        badOrder: String                                 \n" +
+                        "    type BadArgOrderTest {                               \n" +
+                        "        field: String                                    \n" +
                         "    }");
         assertEquals(2, wiringFactory.getErrors().size());
         assertEquals(
-                "Method 'fetchBadOrder' in class 'TestClass1' doesn't have " +
+                "Method 'fetchField' in class 'BadArgOrderTest' doesn't have " +
                         "DataFetchingEnvironment as first parameter",
                 wiringFactory.getErrors().get(0));
     }
 
-    @Test
-    public void fetcherMissingArguments() throws Exception {
-        ReflectionWiringFactory wiringFactory = wireSchema("" +
-                        "    schema {                                             \n" +
-                        "        query: TestClass1                                \n" +
-                        "    }                                                    \n" +
-                        "                                                         \n" +
-                        "    type TestClass1 {                                    \n" +
-                        "        manyArguments(a: Int, b: String, c: Boolean): Int\n" +
-                        "    }");
-        assertEquals(2, wiringFactory.getErrors().size());
-        assertEquals(
-                "Method 'fetchManyArguments' in class 'TestClass1' doesn't have the right " +
-                        "number of arguments",
-                wiringFactory.getErrors().get(0));
+    public class ArgsMismatchTest {
+        public Integer fetchMissingArg(DataFetchingEnvironment env, int a, String b) {
+            return 1;
+        }
+        public Integer fetchExtraArg(DataFetchingEnvironment env, int a, String b) {
+            return 1;
+        }
+        public Integer fetchWrongArgs(DataFetchingEnvironment env, int a, String b) {
+            return 1;
+        }
     }
 
     @Test
-    public void fetcherExtraArguments() throws Exception {
-        ReflectionWiringFactory wiringFactory = wireSchema("" +
+    public void fetcherArgumentsMissmatch() throws Exception {
+        ReflectionWiringFactory wiringFactory = wireSchema(
+                Collections.singletonList(ArgsMismatchTest.class), "" +
                         "    schema {                                             \n" +
-                        "        query: TestClass1                                \n" +
+                        "        query: ArgsMismatchTest                          \n" +
                         "    }                                                    \n" +
                         "                                                         \n" +
-                        "    type TestClass1 {                                    \n" +
-                        "        manyArguments(a: Int): Int                       \n" +
+                        "    type ArgsMismatchTest {                              \n" +
+                        "        missingArg(a: Int, b: String, c: Boolean): Int   \n" +
+                        "        extraArg(a: Int): Int                            \n" +
+                        "        wrongArgs(a: String, b: String): Int             \n" +
                         "    }");
-        assertEquals(2, wiringFactory.getErrors().size());
+        assertEquals(6, wiringFactory.getErrors().size());
         assertEquals(
-                "Method 'fetchManyArguments' in class 'TestClass1' doesn't have the right " +
+                "Method 'fetchMissingArg' in class 'ArgsMismatchTest' doesn't have the right " +
                         "number of arguments",
                 wiringFactory.getErrors().get(0));
-    }
-
-    @Test
-    public void fetcherSignatureMismatch() throws Exception {
-        ReflectionWiringFactory wiringFactory = wireSchema("" +
-                        "    schema {                                             \n" +
-                        "        query: TestClass1                                \n" +
-                        "    }                                                    \n" +
-                        "                                                         \n" +
-                        "    type TestClass1 {                                    \n" +
-                        "        manyArguments(a: String, b: Int): Int            \n" +
-                        "    }");
-        assertEquals(2, wiringFactory.getErrors().size());
         assertEquals(
-                "Type mismatch in method 'fetchManyArguments', argument '1' in class " +
-                        "'TestClass1' expected 'String', got 'int'",
-                wiringFactory.getErrors().get(0));
+                "Method 'fetchExtraArg' in class 'ArgsMismatchTest' doesn't have the right " +
+                        "number of arguments",
+                wiringFactory.getErrors().get(2));
+        assertEquals(
+                "Type mismatch in method 'fetchWrongArgs', argument '1' in class " +
+                        "'ArgsMismatchTest' expected 'String', got 'int'",
+                wiringFactory.getErrors().get(4));
     }
 
     @Test
