@@ -13,34 +13,32 @@ import java.util.stream.Collectors;
 
 public class ReflectionWiringFactory implements WiringFactory {
 
-    private final String resolverPackage;
-    private final List<String> errors;
-    private final Map<String, Set<Class<?>>> scalarTypeMap;
-    private final Map<String, Class<?>> objectTypeMap;
-    private final Map<String, Class<?>> inputObjectTypeMap;
-    private final Map<String, Class<?>> enumTypeMap;
-    private final Map<String, Class<?>> interfaceTypeMap;
-    private final Map<String, Set<String>> interfacesImplemented;
-    private final Map<String, Map<String, Method>> resolverMap;
+    private final List<String> errors = new ArrayList<>();
+    private final Map<String, Set<Class<?>>> scalarTypeMap = new HashMap<>();
+    private final Map<String, Class<?>> objectTypeMap = new HashMap<>();
+    private final Map<String, Class<?>> inputObjectTypeMap = new HashMap<>();
+    private final Map<String, Class<?>> enumTypeMap = new HashMap<>();
+    private final Map<String, Class<?>> interfaceTypeMap = new HashMap<>();
+    private final Map<String, Set<String>> interfacesImplemented = new HashMap<>();
+    private final Map<String, Map<String, Method>> resolverMap = new HashMap<>();
 
-    public ReflectionWiringFactory(String resolverPackage, TypeDefinitionRegistry registry) {
-        this.resolverPackage = resolverPackage;
-        errors = new ArrayList<>();
-        objectTypeMap = new HashMap<>();
-        inputObjectTypeMap = new HashMap<>();
-        enumTypeMap = new HashMap<>();
-        interfaceTypeMap = new HashMap<>();
-        interfacesImplemented = new HashMap<>();
-        resolverMap = new HashMap<>();
+    public ReflectionWiringFactory(TypeDefinitionRegistry registry, String packageName) {
+        Map<String, Class<?>> classes = new HashMap<>();
+        for (TypeDefinition typeDef : registry.types().values()) {
+            String className = packageName + "." + typeDef.getName();
+            try {
+                classes.put(typeDef.getName(), Class.forName(className));
+            } catch (ClassNotFoundException e) {
+            }
+        }
+        registerTypes(registry.types().values(), classes);
+        verifyClasses(registry.types().values());
+    }
 
-        scalarTypeMap = new HashMap<>();
-        scalarTypeMap.put("Boolean", new HashSet<>(Arrays.asList(Boolean.class, boolean.class)));
-        scalarTypeMap.put("Int", new HashSet<>(Arrays.asList(Integer.class, int.class)));
-        scalarTypeMap.put("Float", new HashSet<>(Arrays.asList(Float.class, float.class, Double.class, double.class)));
-        scalarTypeMap.put("String", new HashSet<>(Collections.singletonList(String.class)));
-        scalarTypeMap.put("ID", new HashSet<>(Collections.singletonList(String.class)));
-
-        findClassesFromPackage(resolverPackage, registry.types().values());
+    public ReflectionWiringFactory(TypeDefinitionRegistry registry, Collection<Class<?>> classList) {
+        Map<String, Class<?>> classes = classList.stream()
+                .collect(Collectors.toMap(Class::getSimpleName, Function.identity()));
+        registerTypes(registry.types().values(), classes);
         verifyClasses(registry.types().values());
     }
 
@@ -86,19 +84,24 @@ public class ReflectionWiringFactory implements WiringFactory {
         return errors;
     }
 
-    private void findClassesFromPackage(String packageName, Collection<TypeDefinition> graphqlTypes) {
-        for (TypeDefinition typeDef : graphqlTypes) {
+    private void registerTypes(Collection<TypeDefinition> graphqlTypes, Map<String, Class<?>> classes) {
 
-            Class<?> javaClass;
-            String className = packageName + "." + typeDef.getName();
-            try {
-                javaClass = Class.forName(className);
-                if (!Modifier.isPublic(javaClass.getModifiers())) {
-                    error("Class '%s' is not public", javaClass.getName());
-                    continue;
-                }
-            } catch (ClassNotFoundException e) {
-                error("Class '%s' not found", className);
+        scalarTypeMap.put("Boolean", new HashSet<>(Arrays.asList(Boolean.class, boolean.class)));
+        scalarTypeMap.put("Int", new HashSet<>(Arrays.asList(Integer.class, int.class)));
+        scalarTypeMap.put("Float", new HashSet<>(Arrays.asList(Float.class, float.class, Double.class, double.class)));
+        scalarTypeMap.put("String", new HashSet<>(Collections.singletonList(String.class)));
+        scalarTypeMap.put("ID", new HashSet<>(Collections.singletonList(String.class)));
+
+        for (TypeDefinition typeDef : graphqlTypes) {
+            Class<?> javaClass = classes.get(typeDef.getName());
+
+            if (javaClass == null) {
+                error("Class for type '%s' was not found", typeDef.getName());
+                continue;
+            }
+
+            if (!Modifier.isPublic(javaClass.getModifiers())) {
+                error("Class '%s' is not public", javaClass.getSimpleName());
                 continue;
             }
 
@@ -155,7 +158,7 @@ public class ReflectionWiringFactory implements WiringFactory {
         }
 
         for (FieldDefinition fieldDef : graphqlObjectTypeDef.getFieldDefinitions()) {
-            Method method = findCompatibleMethod(fieldDef, javaClass);
+            Method method = findCompatibleMethod(javaClass, fieldDef);
 
             if (method == null) {
                 error("Unable to find resolver for field '%s' of type '%s'",
@@ -171,7 +174,7 @@ public class ReflectionWiringFactory implements WiringFactory {
             Class<?> javaInterface = interfaceTypeMap.get(interfaceName);
             if (javaInterface == null || !javaInterface.isAssignableFrom(javaClass)) {
                 error("Class '%s' does not implement interface '%s'",
-                        javaClass.getName(), interfaceName);
+                        javaClass.getSimpleName(), interfaceName);
             }
         }
     }
@@ -181,15 +184,15 @@ public class ReflectionWiringFactory implements WiringFactory {
 
         if (!javaInterface.isInterface()) {
             error("Class '%s' is not an interface but defined in GraphQL as interface",
-                    javaInterface.getName());
+                    javaInterface.getSimpleName());
             return;
         }
 
         for (FieldDefinition fieldDef : graphqlInterfaceDef.getFieldDefinitions()) {
-            Method method = findCompatibleMethod(fieldDef, javaInterface);
+            Method method = findCompatibleMethod(javaInterface, fieldDef);
             if (method == null) {
                 error("Interface '%s' does not define properly define method '%s'",
-                        javaInterface.getName(), fieldDef.getName());
+                        javaInterface.getSimpleName(), fieldDef.getName());
                 return;
             }
         }
@@ -204,13 +207,13 @@ public class ReflectionWiringFactory implements WiringFactory {
 
         if (!javaUnion.isInterface()) {
             error("Class '%s' is not an interface but defined in GraphQL as Union",
-                    javaUnion.getName());
+                    javaUnion.getSimpleName());
             return;
         }
 
         if (javaUnion.getMethods().length != 0) {
             error("Interface '%s' should not have methods, it's mapped as a GraphQL Union",
-                    javaUnion.getName());
+                    javaUnion.getSimpleName());
         }
     }
 
@@ -222,7 +225,7 @@ public class ReflectionWiringFactory implements WiringFactory {
         }
 
         if (!javaEnum.isEnum()) {
-            error("Class '%s' is not Enum", javaEnum.getName());
+            error("Class '%s' is not Enum", javaEnum.getSimpleName());
             return;
         }
         @SuppressWarnings("unchecked")
@@ -235,7 +238,7 @@ public class ReflectionWiringFactory implements WiringFactory {
                 .collect(Collectors.toSet());
         if (!graphqlEnumNames.equals(javaEnumNames)) {
             error("Java Enum '%s' doesn't have the same values as GraphQL Enum '%s'",
-                    e.getName(), graphqlEnumDef.getName());
+                    e.getSimpleName(), graphqlEnumDef.getName());
         }
     }
 
@@ -248,13 +251,13 @@ public class ReflectionWiringFactory implements WiringFactory {
         }
     }
 
-    private Method findCompatibleMethod(FieldDefinition graphqlFieldDef, Class<?> javaClass) {
-        Method fetcherMethod = findFetcherMethod(graphqlFieldDef, javaClass);
+    private Method findCompatibleMethod(Class<?> javaClass, FieldDefinition graphqlFieldDef) {
+        Method fetcherMethod = findFetcherMethod(javaClass, graphqlFieldDef);
         if (fetcherMethod != null) {
             return fetcherMethod;
         }
 
-        Method getterMethod = findGetter(graphqlFieldDef, javaClass);
+        Method getterMethod = findGetter(javaClass, graphqlFieldDef);
         if (getterMethod != null) {
             return getterMethod;
         }
@@ -262,10 +265,10 @@ public class ReflectionWiringFactory implements WiringFactory {
         return null;
     }
 
-    private Method findFetcherMethod(FieldDefinition graphqlFieldDef, Class cls) {
+    private Method findFetcherMethod(Class<?> javaClass, FieldDefinition graphqlFieldDef) {
         String fetcherName = buildFetcherName("fetch", graphqlFieldDef);
 
-        Method method = findPublicMethod(cls, fetcherName, graphqlFieldDef.getType());
+        Method method = findPublicMethod(javaClass, fetcherName, graphqlFieldDef.getType());
 
         if (method == null) {
             return null;
@@ -275,7 +278,7 @@ public class ReflectionWiringFactory implements WiringFactory {
 
         if (methodParams.isEmpty()) {
             error("Method '%s' in class '%s' doesn't have DataFetchingEnvironment as first parameter",
-                    fetcherName, cls.getName());
+                    fetcherName, javaClass.getSimpleName());
             return null;
         }
 
@@ -283,7 +286,7 @@ public class ReflectionWiringFactory implements WiringFactory {
 
         if (!envParam.getType().equals(DataFetchingEnvironment.class)) {
             error("Method '%s' in class '%s' doesn't have DataFetchingEnvironment as first parameter",
-                    fetcherName, cls.getName());
+                    fetcherName, javaClass.getSimpleName());
             return null;
         }
 
@@ -291,7 +294,7 @@ public class ReflectionWiringFactory implements WiringFactory {
 
         if (methodParams.size() != fieldParams.size()) {
             error("Method '%s' in class '%s' doesn't have the right number of arguments",
-                    fetcherName, cls.getName());
+                    fetcherName, javaClass.getSimpleName());
             return null;
         }
 
@@ -301,8 +304,8 @@ public class ReflectionWiringFactory implements WiringFactory {
             if (!isTypeCompatible(inputDef.getType(), param.getType(), param.getAnnotatedType())) {
                 error("Type mismatch in method '%s', argument '%d' in class '%s' " +
                                 "expected '%s', got '%s'",
-                        fetcherName, i + 1, cls.getName(), inputDef.getType().toString(),
-                        param.getType().getName());
+                        fetcherName, i + 1, javaClass.getSimpleName(), typeToString(inputDef.getType()),
+                        param.getType().getSimpleName());
                 return null;
             }
         }
@@ -310,19 +313,19 @@ public class ReflectionWiringFactory implements WiringFactory {
         return method;
     }
 
-    private Method findGetter(FieldDefinition fieldDefinition, Class cls) {
+    private Method findGetter(Class<?> javaClass, FieldDefinition fieldDefinition) {
         String fetcherName = buildFetcherName("get", fieldDefinition);
-        Method getter = findPublicMethod(cls, fetcherName, fieldDefinition.getType());
+        Method getter = findPublicMethod(javaClass, fetcherName, fieldDefinition.getType());
 
         if (getter == null && isTypeCompatible(fieldDefinition.getType(), Boolean.class)) {
             fetcherName = buildFetcherName("is", fieldDefinition);
-            getter = findPublicMethod(cls, fetcherName, fieldDefinition.getType());
+            getter = findPublicMethod(javaClass, fetcherName, fieldDefinition.getType());
         }
         return getter;
     }
 
-    private Method findPublicMethod(Class cls, String methodName, Type fieldReturnType) {
-        List<Method> matchingMethods = Arrays.stream(cls.getMethods())
+    private Method findPublicMethod(Class<?> javaClass, String methodName, Type fieldReturnType) {
+        List<Method> matchingMethods = Arrays.stream(javaClass.getMethods())
                 .filter(m -> m.getName().equals(methodName))
                 .collect(Collectors.toList());
 
@@ -331,7 +334,7 @@ public class ReflectionWiringFactory implements WiringFactory {
         }
 
         if (matchingMethods.size() > 1) {
-            error("Overloaded '%s' method not allowed in class '%s'", methodName, cls.getName());
+            error("Overloaded '%s' method not allowed in class '%s'", methodName, javaClass.getSimpleName());
             return null;
         }
 
@@ -339,7 +342,7 @@ public class ReflectionWiringFactory implements WiringFactory {
 
         if (!isTypeCompatible(fieldReturnType, method.getReturnType(), method.getAnnotatedReturnType())) {
             error("Method '%s' in class '%s' returns '%s' instead of expected '%s'",
-                    methodName, cls.getName(), method.getReturnType().getName(), typeToString(fieldReturnType));
+                    methodName, javaClass.getSimpleName(), method.getReturnType().getSimpleName(), typeToString(fieldReturnType));
             return null;
         }
 

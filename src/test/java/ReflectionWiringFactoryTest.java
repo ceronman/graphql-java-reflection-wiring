@@ -20,17 +20,17 @@ public class ReflectionWiringFactoryTest {
     private ReflectionWiringFactory wireSchema(String pkg, String schema) {
         SchemaParser schemaParser = new SchemaParser();
         TypeDefinitionRegistry typeDefinitionRegistry = schemaParser.parse(schema);
-        ReflectionWiringFactory wiringFactory = new ReflectionWiringFactory(pkg, typeDefinitionRegistry);
+        ReflectionWiringFactory wiringFactory = new ReflectionWiringFactory(typeDefinitionRegistry, pkg);
         RuntimeWiring runtimeWiring = newRuntimeWiring().wiringFactory(wiringFactory).build();
         SchemaGenerator schemaGenerator = new SchemaGenerator();
-        GraphQLSchema graphQLSchema = schemaGenerator.makeExecutableSchema(typeDefinitionRegistry, runtimeWiring);
+        schemaGenerator.makeExecutableSchema(typeDefinitionRegistry, runtimeWiring);
         return wiringFactory;
     }
 
     private String executeQuery(String pkg, String schema, String query) {
         SchemaParser schemaParser = new SchemaParser();
         TypeDefinitionRegistry typeDefinitionRegistry = schemaParser.parse(schema);
-        ReflectionWiringFactory wiringFactory = new ReflectionWiringFactory(pkg, typeDefinitionRegistry);
+        ReflectionWiringFactory wiringFactory = new ReflectionWiringFactory(typeDefinitionRegistry, pkg);
         RuntimeWiring runtimeWiring = newRuntimeWiring().wiringFactory(wiringFactory).build();
         SchemaGenerator schemaGenerator = new SchemaGenerator();
         GraphQLSchema graphQLSchema = schemaGenerator.makeExecutableSchema(typeDefinitionRegistry, runtimeWiring);
@@ -61,12 +61,12 @@ public class ReflectionWiringFactoryTest {
                         "    }");
         assertEquals(1, wiringFactory.getErrors().size());
         assertEquals(
-                "Class 'wiringtests.NonExistentClass' not found",
+                "Class for type 'NonExistentClass' was not found",
                 wiringFactory.getErrors().get(0));
     }
 
     @Test
-    public void missingFieldError() throws Exception {
+    public void missingResolverError() throws Exception {
         ReflectionWiringFactory wiringFactory = wireSchema("" +
                         "    schema {                                             \n" +
                         "        query: TestClass1                                \n" +
@@ -93,7 +93,7 @@ public class ReflectionWiringFactoryTest {
                         "    }");
         assertEquals(2, wiringFactory.getErrors().size());
         assertEquals(
-                "Method 'getIntField' in class 'wiringtests.TestClass1' returns 'int' instead of expected " +
+                "Method 'getIntField' in class 'TestClass1' returns 'int' instead of expected " +
                         "'String'",
                 wiringFactory.getErrors().get(0));
     }
@@ -110,7 +110,7 @@ public class ReflectionWiringFactoryTest {
                         "    }");
         assertEquals(2, wiringFactory.getErrors().size());
         assertEquals(
-                "Method 'fetchFloatField' in class 'wiringtests.TestClass1' returns 'float' instead of " +
+                "Method 'fetchFloatField' in class 'TestClass1' returns 'float' instead of " +
                         "expected 'Boolean'",
                 wiringFactory.getErrors().get(0));
     }
@@ -128,12 +128,10 @@ public class ReflectionWiringFactoryTest {
                         "    }");
         assertEquals(4, wiringFactory.getErrors().size());
         assertEquals(
-                "Method 'fetchStreamField' in class 'wiringtests.TestClass1' returns " +
-                        "'java.util.stream.Stream' instead of expected '[Int]'",
+                "Method 'fetchStreamField' in class 'TestClass1' returns 'Stream' instead of expected '[Int]'",
                 wiringFactory.getErrors().get(0));
         assertEquals(
-                "Method 'fetchListField' in class 'wiringtests.TestClass1' returns " +
-                        "'java.util.List' instead of expected '[Int]'",
+                "Method 'fetchListField' in class 'TestClass1' returns 'List' instead of expected '[Int]'",
                 wiringFactory.getErrors().get(2));
     }
 
@@ -149,7 +147,7 @@ public class ReflectionWiringFactoryTest {
                         "    }");
         assertEquals(2, wiringFactory.getErrors().size());
         assertEquals(
-                "Method 'fetchNoEnv' in class 'wiringtests.TestClass1' doesn't have DataFetchingEnvironment " +
+                "Method 'fetchNoEnv' in class 'TestClass1' doesn't have DataFetchingEnvironment " +
                         "as first parameter",
                 wiringFactory.getErrors().get(0));
     }
@@ -166,7 +164,7 @@ public class ReflectionWiringFactoryTest {
                         "    }");
         assertEquals(2, wiringFactory.getErrors().size());
         assertEquals(
-                "Method 'fetchBadOrder' in class 'wiringtests.TestClass1' doesn't have " +
+                "Method 'fetchBadOrder' in class 'TestClass1' doesn't have " +
                         "DataFetchingEnvironment as first parameter",
                 wiringFactory.getErrors().get(0));
     }
@@ -183,7 +181,7 @@ public class ReflectionWiringFactoryTest {
                         "    }");
         assertEquals(2, wiringFactory.getErrors().size());
         assertEquals(
-                "Method 'fetchManyArguments' in class 'wiringtests.TestClass1' doesn't have the right " +
+                "Method 'fetchManyArguments' in class 'TestClass1' doesn't have the right " +
                         "number of arguments",
                 wiringFactory.getErrors().get(0));
     }
@@ -200,7 +198,7 @@ public class ReflectionWiringFactoryTest {
                         "    }");
         assertEquals(2, wiringFactory.getErrors().size());
         assertEquals(
-                "Method 'fetchManyArguments' in class 'wiringtests.TestClass1' doesn't have the right " +
+                "Method 'fetchManyArguments' in class 'TestClass1' doesn't have the right " +
                         "number of arguments",
                 wiringFactory.getErrors().get(0));
     }
@@ -218,7 +216,7 @@ public class ReflectionWiringFactoryTest {
         assertEquals(2, wiringFactory.getErrors().size());
         assertEquals(
                 "Type mismatch in method 'fetchManyArguments', argument '1' in class " +
-                        "'wiringtests.TestClass1' expected 'TypeName{name='String'}', got 'int'",
+                        "'TestClass1' expected 'String', got 'int'",
                 wiringFactory.getErrors().get(0));
     }
 
@@ -266,7 +264,7 @@ public class ReflectionWiringFactoryTest {
                         "    }");
         assertEquals(2, wiringFactory.getErrors().size());
         assertEquals(
-                "Overloaded 'fetchField2' method not allowed in class 'wiringtests.TestClass1'",
+                "Overloaded 'fetchField2' method not allowed in class 'TestClass1'",
                 wiringFactory.getErrors().get(0));
     }
 
@@ -282,7 +280,7 @@ public class ReflectionWiringFactoryTest {
                         "    }");
         assertEquals(1, wiringFactory.getErrors().size());
         assertEquals(
-                "Class 'wiringtests.TestClass2' is not public",
+                "Class 'TestClass2' is not public",
                 wiringFactory.getErrors().get(0));
     }
 
@@ -324,7 +322,7 @@ public class ReflectionWiringFactoryTest {
                 "    }");
         assertEquals(1, wiringFactory.getErrors().size());
         assertEquals(
-                "Class 'wiringtests.TestClass4' does not implement interface 'TestInterface'",
+                "Class 'TestClass4' does not implement interface 'TestInterface'",
                 wiringFactory.getErrors().get(0));
     }
 
@@ -349,7 +347,7 @@ public class ReflectionWiringFactoryTest {
                 "    }");
         assertEquals(1, wiringFactory.getErrors().size());
         assertEquals(
-                "Interface 'wiringtests.TestInterface' does not define properly define method 'field2'",
+                "Interface 'TestInterface' does not define properly define method 'field2'",
                 wiringFactory.getErrors().get(0));
     }
 
@@ -374,7 +372,7 @@ public class ReflectionWiringFactoryTest {
                 "    }");
         assertEquals(1, wiringFactory.getErrors().size());
         assertEquals(
-                "Class 'wiringtests.TestClass6' is not an interface but defined in GraphQL as interface",
+                "Class 'TestClass6' is not an interface but defined in GraphQL as interface",
                 wiringFactory.getErrors().get(0));
     }
 
@@ -401,7 +399,7 @@ public class ReflectionWiringFactoryTest {
                         "    }");
         assertEquals(1, wiringFactory.getErrors().size());
         assertEquals(
-                "Class 'uniontests.NotInterfaceUnion' is not an interface but defined in GraphQL as Union",
+                "Class 'NotInterfaceUnion' is not an interface but defined in GraphQL as Union",
                 wiringFactory.getErrors().get(0));
     }
 
@@ -428,7 +426,7 @@ public class ReflectionWiringFactoryTest {
                 "    }");
         assertEquals(1, wiringFactory.getErrors().size());
         assertEquals(
-                "Interface 'uniontests.InterfaceWithMethodsUnion' should not have methods, " +
+                "Interface 'InterfaceWithMethodsUnion' should not have methods, " +
                         "it's mapped as a GraphQL Union",
                 wiringFactory.getErrors().get(0));
     }
