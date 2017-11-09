@@ -8,6 +8,7 @@ import graphql.schema.idl.SchemaGenerator;
 import graphql.schema.idl.SchemaParser;
 import graphql.schema.idl.TypeDefinitionRegistry;
 import org.junit.Test;
+import uniontests.NotInterfaceUnion;
 
 import java.util.*;
 import java.util.stream.Stream;
@@ -477,9 +478,27 @@ public class ReflectionWiringFactoryTest {
                 wiringFactory.getErrors().get(0));
     }
 
+    public class NotInterfaceUnionQuery {
+        public NotInterfaceUnion fetchUnionFieldA(DataFetchingEnvironment env) { return null; }
+        public NotInterfaceUnion fetchUnionFieldB(DataFetchingEnvironment env) { return null; }
+    }
+
+    public class NotInterfaceUnion {}
+
+    public class UTypeA extends NotInterfaceUnion {
+        public String getStringField() { return "string"; }
+    }
+
+    public class UTypeB extends NotInterfaceUnion {
+        public int getIntField() { return 42; }
+    }
+
+
     @Test
     public void unionIsNotInterface() throws Exception {
-        ReflectionWiringFactory wiringFactory = wireSchema("uniontests", "" +
+        ReflectionWiringFactory wiringFactory = wireSchema(
+                Arrays.asList(NotInterfaceUnionQuery.class, NotInterfaceUnion.class, UTypeA.class, UTypeB.class),
+                "" +
                         "    schema {                                             \n" +
                         "        query: NotInterfaceUnionQuery                    \n" +
                         "    }                                                    \n" +
@@ -489,13 +508,13 @@ public class ReflectionWiringFactoryTest {
                         "        unionFieldB: NotInterfaceUnion                   \n" +
                         "    }                                                    \n" +
                         "                                                         \n" +
-                        "    union NotInterfaceUnion = TypeC | TypeD              \n" +
+                        "    union NotInterfaceUnion = UTypeA | UTypeB            \n" +
                         "                                                         \n" +
-                        "    type TypeC {                                         \n" +
+                        "    type UTypeA {                                        \n" +
                         "        stringField: String                              \n" +
                         "    }                                                    \n" +
                         "                                                         \n" +
-                        "    type TypeD {                                         \n" +
+                        "    type UTypeB {                                        \n" +
                         "        intField: Int                                    \n" +
                         "    }");
         assertEquals(1, wiringFactory.getErrors().size());
@@ -504,9 +523,30 @@ public class ReflectionWiringFactoryTest {
                 wiringFactory.getErrors().get(0));
     }
 
+    public class BadUnionTestQuery {
+        public InterfaceWithMethodsUnion fetchUnionFieldA(DataFetchingEnvironment env) { return null; }
+        public InterfaceWithMethodsUnion fetchUnionFieldB(DataFetchingEnvironment env) { return null; }
+    }
+
+    public interface InterfaceWithMethodsUnion {
+        void method();
+    }
+
+    public class UTypeC implements InterfaceWithMethodsUnion {
+        public String getStringField() { return "string"; }
+        public void method() {}
+    }
+
+    public class UTypeD implements InterfaceWithMethodsUnion {
+        public int getIntField() { return 42; }
+        public void method() {}
+    }
+
     @Test
     public void unionInterfaceWithMethods() throws Exception {
-        ReflectionWiringFactory wiringFactory = wireSchema("uniontests", "" +
+        ReflectionWiringFactory wiringFactory = wireSchema(
+                Arrays.asList(BadUnionTestQuery.class, InterfaceWithMethodsUnion.class, UTypeC.class, UTypeD.class),
+                "" +
                 "    schema {                                             \n" +
                 "        query: BadUnionTestQuery                         \n" +
                 "    }                                                    \n" +
@@ -516,13 +556,13 @@ public class ReflectionWiringFactoryTest {
                 "        unionFieldB: InterfaceWithMethodsUnion           \n" +
                 "    }                                                    \n" +
                 "                                                         \n" +
-                "    union InterfaceWithMethodsUnion = BadTypeA | BadTypeB\n" +
+                "    union InterfaceWithMethodsUnion = UTypeC | UTypeD    \n" +
                 "                                                         \n" +
-                "    type BadTypeA {                                      \n" +
+                "    type UTypeC {                                        \n" +
                 "        stringField: String                              \n" +
                 "    }                                                    \n" +
                 "                                                         \n" +
-                "    type BadTypeB {                                      \n" +
+                "    type UTypeD {                                        \n" +
                 "        intField: Int                                    \n" +
                 "    }");
         assertEquals(1, wiringFactory.getErrors().size());
