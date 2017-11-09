@@ -9,14 +9,11 @@ import graphql.schema.idl.SchemaParser;
 import graphql.schema.idl.TypeDefinitionRegistry;
 import org.junit.Test;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Stream;
 
 import static graphql.schema.idl.RuntimeWiring.newRuntimeWiring;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
 
 public class ReflectionWiringFactoryTest {
 
@@ -263,159 +260,220 @@ public class ReflectionWiringFactoryTest {
                 wiringFactory.getErrors().get(4));
     }
 
-    @Test
-    public void getterIsNotPublic() throws Exception {
-        ReflectionWiringFactory wiringFactory = wireSchema("" +
-                        "    schema {                                             \n" +
-                        "        query: TestClass1                                \n" +
-                        "    }                                                    \n" +
-                        "                                                         \n" +
-                        "    type TestClass1 {                                    \n" +
-                        "        someField: Float                                 \n" +
-                        "    }");
-        assertEquals(1, wiringFactory.getErrors().size());
-        assertEquals(
-                "Unable to find resolver for field 'someField' of type 'TestClass1'",
-                wiringFactory.getErrors().get(0));
+    public class PrivateResolverTest {
+        private float getField1() { return 0.0f; }
+        private int fetchField2(DataFetchingEnvironment env) { return 0; }
     }
 
     @Test
-    public void fetcherIsNotPublic() throws Exception {
-        ReflectionWiringFactory wiringFactory = wireSchema("" +
+    public void resolverIsNotPublic() throws Exception {
+        ReflectionWiringFactory wiringFactory = wireSchema(
+                Collections.singletonList(PrivateResolverTest.class),"" +
                         "    schema {                                             \n" +
-                        "        query: TestClass1                                \n" +
+                        "        query: PrivateResolverTest                       \n" +
                         "    }                                                    \n" +
                         "                                                         \n" +
-                        "    type TestClass1 {                                    \n" +
-                        "        field1: Boolean                                  \n" +
-                        "    }");
-        assertEquals(1, wiringFactory.getErrors().size());
-        assertEquals(
-                "Unable to find resolver for field 'field1' of type 'TestClass1'",
-                wiringFactory.getErrors().get(0));
-    }
-
-    @Test
-    public void fetcherIsOverloaded() throws Exception {
-        ReflectionWiringFactory wiringFactory = wireSchema("" +
-                        "    schema {                                             \n" +
-                        "        query: TestClass1                                \n" +
-                        "    }                                                    \n" +
-                        "                                                         \n" +
-                        "    type TestClass1 {                                    \n" +
+                        "    type PrivateResolverTest {                           \n" +
+                        "        field1: Float                                    \n" +
                         "        field2: Int                                      \n" +
                         "    }");
         assertEquals(2, wiringFactory.getErrors().size());
         assertEquals(
-                "Overloaded 'fetchField2' method not allowed in class 'TestClass1'",
+                "Unable to find resolver for field 'field1' of type 'PrivateResolverTest'",
                 wiringFactory.getErrors().get(0));
+        assertEquals(
+                "Unable to find resolver for field 'field2' of type 'PrivateResolverTest'",
+                wiringFactory.getErrors().get(1));
+    }
+
+    private class PrivateClassTest {
+        public int getField() { return 0; }
     }
 
     @Test
     public void classTypeIsNotPublic() throws Exception {
-        ReflectionWiringFactory wiringFactory = wireSchema("" +
+        ReflectionWiringFactory wiringFactory = wireSchema(
+                Collections.singletonList(PrivateClassTest.class), "" +
                         "    schema {                                             \n" +
-                        "        query: TestClass2                                \n" +
+                        "        query: PrivateClassTest                          \n" +
                         "    }                                                    \n" +
                         "                                                         \n" +
-                        "    type TestClass2 {                                    \n" +
-                        "        field2(option: String): Int                      \n" +
+                        "    type PrivateClassTest {                              \n" +
+                        "        field: Int                                       \n" +
                         "    }");
         assertEquals(1, wiringFactory.getErrors().size());
         assertEquals(
-                "Class 'TestClass2' is not public",
+                "Class 'PrivateClassTest' is not public",
                 wiringFactory.getErrors().get(0));
+    }
+
+    public class OverloadedMethodTest {
+        public String getField1() { return ""; }
+        public String getField1(int x) { return Integer.toString(x); }
+        public int fetchField2(DataFetchingEnvironment env) { return 0; }
+        public int fetchField2(DataFetchingEnvironment env, int x) { return 0; }
+    }
+
+    @Test
+    public void fetcherIsOverloaded() throws Exception {
+        ReflectionWiringFactory wiringFactory = wireSchema(
+                Collections.singletonList(OverloadedMethodTest.class), "" +
+                "    schema {                                                    \n" +
+                "        query: OverloadedMethodTest                             \n" +
+                "    }                                                           \n" +
+                "                                                                \n" +
+                "    type OverloadedMethodTest {                                 \n" +
+                "        field1: String                                          \n" +
+                "        field2: Int                                             \n" +
+                "    }");
+        assertEquals(4, wiringFactory.getErrors().size());
+        assertEquals(
+                "Overloaded 'getField1' method not allowed in class 'OverloadedMethodTest'",
+                wiringFactory.getErrors().get(0));
+        assertEquals(
+                "Overloaded 'fetchField2' method not allowed in class 'OverloadedMethodTest'",
+                wiringFactory.getErrors().get(2));
+    }
+
+    public class BoolGetterTest {
+        public boolean isField1() { return true; }
+        public int isField2() { return 0; }
     }
 
     @Test
     public void isGetterOnNotBooleanTypes() throws Exception {
-        ReflectionWiringFactory wiringFactory = wireSchema("" +
+        ReflectionWiringFactory wiringFactory = wireSchema(
+                Collections.singletonList(BoolGetterTest.class), "" +
                         "    schema {                                             \n" +
-                        "        query: TestClass1                                \n" +
+                        "        query: BoolGetterTest                            \n" +
                         "    }                                                    \n" +
                         "                                                         \n" +
-                        "    type TestClass1 {                                    \n" +
-                        "        field3: Int                                      \n" +
-                        "        field4: Boolean                                  \n" +
+                        "    type BoolGetterTest {                                \n" +
+                        "        field1: Boolean                                  \n" +
+                        "        field2: Int                                      \n" +
                         "    }");
         assertEquals(1, wiringFactory.getErrors().size());
         assertEquals(
-                "Unable to find resolver for field 'field3' of type 'TestClass1'",
+                "Unable to find resolver for field 'field2' of type 'BoolGetterTest'",
                 wiringFactory.getErrors().get(0));
+    }
+
+    public class InterfaceTestQuery {
+        public NotImplementedInterface getField() { return null; }
+    }
+
+    public interface NotImplementedInterface {
+        String getField1();
+    }
+
+    public class TypeA {
+        public String getField1() { return ""; }
+        public int getField2() { return 0; }
     }
 
     @Test
     public void classDoesNotImplementInterface() throws Exception {
-        ReflectionWiringFactory wiringFactory = wireSchema("" +
+        ReflectionWiringFactory wiringFactory = wireSchema(
+                Arrays.asList(InterfaceTestQuery.class, TypeA.class, NotImplementedInterface.class),
+                "" +
                 "    schema {                                             \n" +
-                "        query: TestClass3                                \n" +
+                "        query: InterfaceTestQuery                        \n" +
                 "    }                                                    \n" +
                 "                                                         \n" +
-                "    type TestClass3 {                                    \n" +
-                "        interfaceField: TestInterface                    \n" +
+                "    type InterfaceTestQuery {                            \n" +
+                "        field: NotImplementedInterface                   \n" +
                 "    }                                                    \n" +
                 "                                                         \n" +
-                "    interface TestInterface {                            \n" +
+                "    interface NotImplementedInterface {                  \n" +
                 "        field1: String                                   \n" +
                 "    }                                                    \n" +
                 "                                                         \n" +
-                "    type TestClass4 implements TestInterface {           \n" +
+                "    type TypeA implements NotImplementedInterface {      \n" +
                 "        field1: String                                   \n" +
                 "        field2: Int                                      \n" +
                 "    }");
         assertEquals(1, wiringFactory.getErrors().size());
         assertEquals(
-                "Class 'TestClass4' does not implement interface 'TestInterface'",
+                "Class 'TypeA' does not implement interface 'NotImplementedInterface'",
                 wiringFactory.getErrors().get(0));
+    }
+
+    public class MissingFieldTestQuery {
+        public MissingFieldInterface getField() { return null; }
+    }
+
+    public interface MissingFieldInterface {
+        String getField1();
+    }
+
+    public class TypeB implements MissingFieldInterface {
+        public String getField1() { return ""; }
+        public int getField2() { return 0; }
     }
 
     @Test
     public void interfaceDoesNotDefineMethod() throws Exception {
-        ReflectionWiringFactory wiringFactory = wireSchema("" +
+        ReflectionWiringFactory wiringFactory = wireSchema(
+                Arrays.asList(MissingFieldTestQuery.class, TypeB.class, MissingFieldInterface.class),
+                "" +
                 "    schema {                                             \n" +
-                "        query: TestClass3                                \n" +
+                "        query: MissingFieldTestQuery                     \n" +
                 "    }                                                    \n" +
                 "                                                         \n" +
-                "    type TestClass3 {                                    \n" +
-                "        interfaceField: TestInterface                    \n" +
+                "    type MissingFieldTestQuery {                         \n" +
+                "        field: MissingFieldInterface                     \n" +
                 "    }                                                    \n" +
                 "                                                         \n" +
-                "    interface TestInterface {                            \n" +
+                "    interface MissingFieldInterface {                    \n" +
                 "        field2: Int                                      \n" +
                 "    }                                                    \n" +
                 "                                                         \n" +
-                "    type TestClass5 implements TestInterface {           \n" +
+                "    type TypeB implements MissingFieldInterface {        \n" +
                 "        field1: String                                   \n" +
                 "        field2: Int                                      \n" +
                 "    }");
         assertEquals(1, wiringFactory.getErrors().size());
         assertEquals(
-                "Interface 'TestInterface' does not define properly define method 'field2'",
+                "Interface 'MissingFieldInterface' does not define properly define method 'field2'",
                 wiringFactory.getErrors().get(0));
+    }
+
+    public class NotInterfaceTest {
+        public NotInterface getField() { return null; }
+    }
+
+    public class NotInterface {
+        public String getField1() { return ""; }
+    }
+
+    public class TypeC extends NotInterface {
+        public int getField2() { return 0; }
     }
 
     @Test
     public void classIsNotInterface() throws Exception {
-        ReflectionWiringFactory wiringFactory = wireSchema("" +
+        ReflectionWiringFactory wiringFactory = wireSchema(
+                Arrays.asList(NotInterfaceTest.class, NotInterface.class, TypeC.class),
+                "" +
                 "    schema {                                             \n" +
-                "        query: TestClass3                                \n" +
+                "        query: NotInterfaceTest                          \n" +
                 "    }                                                    \n" +
                 "                                                         \n" +
-                "    type TestClass3 {                                    \n" +
-                "        testClass6: TestClass6                           \n" +
+                "    type NotInterfaceTest {                              \n" +
+                "        field: NotInterface                              \n" +
                 "    }                                                    \n" +
                 "                                                         \n" +
-                "    interface TestClass6 {                               \n" +
+                "    interface NotInterface {                             \n" +
                 "        field1: String                                   \n" +
                 "    }                                                    \n" +
                 "                                                         \n" +
-                "    type TestClass5 implements TestClass6 {              \n" +
+                "    type TypeC implements NotInterface {                 \n" +
                 "        field1: String                                   \n" +
                 "        field2: Int                                      \n" +
                 "    }");
         assertEquals(1, wiringFactory.getErrors().size());
         assertEquals(
-                "Class 'TestClass6' is not an interface but defined in GraphQL as interface",
+                "Class 'NotInterface' is not an interface but defined in GraphQL as interface",
                 wiringFactory.getErrors().get(0));
     }
 
