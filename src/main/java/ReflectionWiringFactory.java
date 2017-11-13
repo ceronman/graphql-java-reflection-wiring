@@ -408,13 +408,21 @@ public class ReflectionWiringFactory implements WiringFactory {
 
     private DataFetcher buildDataFetcherFromMethod(Method method, List<InputValueDefinition> fieldParams) {
         return env -> {
-            if (!Modifier.isStatic(method.getModifiers()) && env.getSource() == null) {
-                throw new RuntimeException("DataFetcher method doesn't have source.");
+            Object source = env.getSource();
+
+            // TODO: This logic could be done before running the datafetcher
+            if (source == null && !Modifier.isStatic(method.getModifiers())) {
+                try {
+                    source = method.getDeclaringClass().newInstance();
+                } catch (InstantiationException | IllegalAccessException e) {
+                    throw new RuntimeException(String.format("Unable to create instance of class %s",
+                            method.getDeclaringClass().getSimpleName()), e);
+                }
             }
 
             List<Object> parameters = new ArrayList<>();
+            Class<?>[] paramTypes = method.getParameterTypes();
             parameters.add(env);
-
             try {
                 for (InputValueDefinition fieldParam : fieldParams) {
                     Object paramValue = env.getArgument(fieldParam.getName());
@@ -438,9 +446,14 @@ public class ReflectionWiringFactory implements WiringFactory {
                         }
                     }
 
-                    parameters.add(paramValue);
+                    Class<?> paramType = paramTypes[parameters.size()];
+                    if (paramValue instanceof Double && paramType.equals(float.class) || paramType.equals(Float.class)) {
+                        parameters.add(((Double) paramValue).floatValue());
+                    } else {
+                        parameters.add(paramValue);
+                    }
                 }
-                return method.invoke(env.getSource(), parameters.toArray());
+                return method.invoke(source, parameters.toArray());
             } catch (Exception e) {
                 throw new RuntimeException("Error invoking data fetcher", e);
             }

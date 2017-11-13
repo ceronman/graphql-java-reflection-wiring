@@ -21,6 +21,10 @@ public class ReflectionWiringFactoryTest {
         return wireSchema("wiringtests", schema);
     }
 
+    private String executeQuery(String schema, String query) {
+        return executeQuery("wiringtests", schema, query);
+    }
+
     private ReflectionWiringFactory wireSchema(Collection<Class<?>> classes, String schema) {
         SchemaParser schemaParser = new SchemaParser();
         TypeDefinitionRegistry typeDefinitionRegistry = schemaParser.parse(schema);
@@ -59,8 +63,22 @@ public class ReflectionWiringFactoryTest {
         return executionResult.getData().toString();
     }
 
-    private String executeQuery(String schema, String query) {
-        return executeQuery("wiringtests", schema, query);
+    private String executeQuery(Collection<Class<?>> classes, String schema, String query) {
+        SchemaParser schemaParser = new SchemaParser();
+        TypeDefinitionRegistry typeDefinitionRegistry = schemaParser.parse(schema);
+        ReflectionWiringFactory wiringFactory = new ReflectionWiringFactory(typeDefinitionRegistry, classes);
+        RuntimeWiring runtimeWiring = newRuntimeWiring().wiringFactory(wiringFactory).build();
+        SchemaGenerator schemaGenerator = new SchemaGenerator();
+        GraphQLSchema graphQLSchema = schemaGenerator.makeExecutableSchema(typeDefinitionRegistry, runtimeWiring);
+        for (String error : wiringFactory.getErrors()) {
+            throw new RuntimeException(error);
+        }
+        GraphQL build = GraphQL.newGraphQL(graphQLSchema).build();
+        ExecutionResult executionResult = build.execute(query);
+        for (GraphQLError error : executionResult.getErrors()) {
+            throw new RuntimeException(error.toString());
+        }
+        return executionResult.getData().toString();
     }
 
     @Test
@@ -436,30 +454,15 @@ public class ReflectionWiringFactoryTest {
     }
 
     @Test
-    public void resolveSimpleFields() throws Exception {
-        String result = executeQuery("" +
-                        "    schema {                                         \n" +
-                        "        query: TestClass3                            \n" +
-                        "    }                                                \n" +
-                        "                                                     \n" +
-                        "    type TestClass3 {                                \n" +
-                        "        simplefield: String                          \n" +
-                        "        fieldwithargs(a: Int, b: Int): String        \n" +
-                        "    }",
-                "{ simplefield,  fieldwithargs(a:10, b:40) }");
-        assertEquals(
-                "{simplefield=response, fieldwithargs=10, 40}",
-                result);
-    }
-
-    @Test
     public void resolveScalarReturns() throws Exception {
-        String result = executeQuery("" +
+        String result = executeQuery(
+                Collections.singletonList(ScalarTestQuery.class),
+                "" +
                         "    schema {                                         \n" +
-                        "        query: TestClass3                            \n" +
+                        "        query: ScalarTestQuery                       \n" +
                         "    }                                                \n" +
                         "                                                     \n" +
-                        "    type TestClass3 {                                \n" +
+                        "    type ScalarTestQuery {                           \n" +
                         "        booleanScalar:          Boolean              \n" +
                         "        booleanPrimitiveScalar: Boolean              \n" +
                         "        integerScalar:          Int                  \n" +
@@ -470,15 +473,39 @@ public class ReflectionWiringFactoryTest {
                         "        floatPrimitiveScalar:   Float                \n" +
                         "        stringScalar:           String               \n" +
                         "        IDScalar:               ID                   \n" +
+                        "                                                     \n" +
+                        "        field(boolArg: Boolean, boolArg2: Boolean,   \n" +
+                        "              intArg: Int, intArg2: Int,             \n" +
+                        "              doubleArg: Float, doubleArg2: Float,   \n" +
+                        "              floatArg: Float, floatArg2: Float,     \n" +
+                        "              strArg:String, idArg: ID): String      \n" +
                         "    }",
-                "    { booleanScalar, booleanPrimitiveScalar, integerScalar, integerPrimitiveScalar," +
-                        "    doubleScalar, doublePrimitiveScalar, floatScalar, floatPrimitiveScalar," +
-                        "stringScalar, IDScalar }");
+                "" +
+                        "{                                                    \n" +
+                        "   booleanScalar                                     \n" +
+                        "   booleanPrimitiveScalar                            \n" +
+                        "   integerScalar                                     \n" +
+                        "   integerPrimitiveScalar                            \n" +
+                        "   doubleScalar                                      \n" +
+                        "   doublePrimitiveScalar                             \n" +
+                        "   floatScalar                                       \n" +
+                        "   floatPrimitiveScalar                              \n" +
+                        "   stringScalar                                      \n" +
+                        "   IDScalar                                          \n" +
+                        "                                                     \n" +
+                        "   field(boolArg:true, boolArg2:false,               \n" +
+                        "         intArg:1, intArg2:2,                        \n" +
+                        "         doubleArg:3.0, doubleArg2:4.0,              \n" +
+                        "         floatArg:5.0, floatArg2:6.0,                \n" +
+                        "         strArg:\"str\", idArg:\"id\")               \n" +
+                        "}");
         assertEquals(
-                "{booleanScalar=true, booleanPrimitiveScalar=false, integerScalar=1, " +
-                        "integerPrimitiveScalar=2, doubleScalar=3.0, doublePrimitiveScalar=4.0, " +
-                        "floatScalar=5.0, floatPrimitiveScalar=6.0, stringScalar=string result, " +
-                        "IDScalar=ID result}",
+                "{booleanScalar=true, booleanPrimitiveScalar=false, " +
+                        "integerScalar=1, integerPrimitiveScalar=2, " +
+                        "doubleScalar=3.0, doublePrimitiveScalar=4.0, " +
+                        "floatScalar=5.0, floatPrimitiveScalar=6.0, " +
+                        "stringScalar=string result, IDScalar=ID result, " +
+                        "field=true_false_1_2_3.0_4.0_5.0_6.0_str_id}",
                 result);
     }
 
