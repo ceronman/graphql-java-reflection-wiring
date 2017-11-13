@@ -1,17 +1,16 @@
 import graphql.ExecutionResult;
 import graphql.GraphQL;
 import graphql.GraphQLError;
-import graphql.schema.DataFetchingEnvironment;
 import graphql.schema.GraphQLSchema;
 import graphql.schema.idl.RuntimeWiring;
 import graphql.schema.idl.SchemaGenerator;
 import graphql.schema.idl.SchemaParser;
 import graphql.schema.idl.TypeDefinitionRegistry;
 import org.junit.Test;
-import uniontests.NotInterfaceUnion;
+import test.NoEnvArgTest;
+import testresolvers.*;
 
 import java.util.*;
-import java.util.stream.Stream;
 
 import static graphql.schema.idl.RuntimeWiring.newRuntimeWiring;
 import static org.junit.Assert.assertEquals;
@@ -80,9 +79,6 @@ public class ReflectionWiringFactoryTest {
                 wiringFactory.getErrors().get(0));
     }
 
-    public class MissingFieldTest {
-    }
-
     @Test
     public void missingResolverError() throws Exception {
         ReflectionWiringFactory wiringFactory = wireSchema(
@@ -98,10 +94,6 @@ public class ReflectionWiringFactoryTest {
         assertEquals(
                 "Unable to find resolver for field 'hello' of type 'MissingFieldTest'",
                 wiringFactory.getErrors().get(0));
-    }
-
-    public class BadGetterReturnTypeTest {
-        public int getField() { return 1; }
     }
 
     @Test
@@ -122,10 +114,6 @@ public class ReflectionWiringFactoryTest {
                 wiringFactory.getErrors().get(0));
     }
 
-    public class BadFetcherReturnTypeTest {
-        public float fetchField(DataFetchingEnvironment env) { return 1.0f; }
-    }
-
     @Test
     public void badFetcherReturnType() throws Exception {
         ReflectionWiringFactory wiringFactory = wireSchema(
@@ -142,15 +130,6 @@ public class ReflectionWiringFactoryTest {
                 "Method 'fetchField' in class 'BadFetcherReturnTypeTest' returns 'float' " +
                         "instead of expected 'Boolean'",
                 wiringFactory.getErrors().get(0));
-    }
-
-    public class BadListTest {
-        public Stream<Integer> fetchStreamField(DataFetchingEnvironment env) {
-            return Stream.of(1, 2, 3);
-        }
-        public List fetchListField(DataFetchingEnvironment env) {
-            return new ArrayList();
-        }
     }
 
     @Test
@@ -174,10 +153,6 @@ public class ReflectionWiringFactoryTest {
                 wiringFactory.getErrors().get(2));
     }
 
-    public class NoEnvArgTest {
-        public boolean fetchField() { return true; }
-    }
-
     @Test
     public void fetcherWithoutEnvArgument() throws Exception {
         ReflectionWiringFactory wiringFactory = wireSchema(
@@ -197,12 +172,6 @@ public class ReflectionWiringFactoryTest {
                 wiringFactory.getErrors().get(0));
     }
 
-    public class BadArgOrderTest {
-        public String fetchField(int arg, DataFetchingEnvironment env) {
-            return "";
-        }
-    }
-
     @Test
     public void fetcherBadArgumentOrder() throws Exception {
         ReflectionWiringFactory wiringFactory = wireSchema(
@@ -219,18 +188,6 @@ public class ReflectionWiringFactoryTest {
                 "Method 'fetchField' in class 'BadArgOrderTest' doesn't have " +
                         "DataFetchingEnvironment as first parameter",
                 wiringFactory.getErrors().get(0));
-    }
-
-    public class ArgsMismatchTest {
-        public Integer fetchMissingArg(DataFetchingEnvironment env, int a, String b) {
-            return 1;
-        }
-        public Integer fetchExtraArg(DataFetchingEnvironment env, int a, String b) {
-            return 1;
-        }
-        public Integer fetchWrongArgs(DataFetchingEnvironment env, int a, String b) {
-            return 1;
-        }
     }
 
     @Test
@@ -261,11 +218,6 @@ public class ReflectionWiringFactoryTest {
                 wiringFactory.getErrors().get(4));
     }
 
-    public class PrivateResolverTest {
-        private float getField1() { return 0.0f; }
-        private int fetchField2(DataFetchingEnvironment env) { return 0; }
-    }
-
     @Test
     public void resolverIsNotPublic() throws Exception {
         ReflectionWiringFactory wiringFactory = wireSchema(
@@ -287,10 +239,6 @@ public class ReflectionWiringFactoryTest {
                 wiringFactory.getErrors().get(1));
     }
 
-    private class PrivateClassTest {
-        public int getField() { return 0; }
-    }
-
     @Test
     public void classTypeIsNotPublic() throws Exception {
         ReflectionWiringFactory wiringFactory = wireSchema(
@@ -306,13 +254,6 @@ public class ReflectionWiringFactoryTest {
         assertEquals(
                 "Class 'PrivateClassTest' is not public",
                 wiringFactory.getErrors().get(0));
-    }
-
-    public class OverloadedMethodTest {
-        public String getField1() { return ""; }
-        public String getField1(int x) { return Integer.toString(x); }
-        public int fetchField2(DataFetchingEnvironment env) { return 0; }
-        public int fetchField2(DataFetchingEnvironment env, int x) { return 0; }
     }
 
     @Test
@@ -336,11 +277,6 @@ public class ReflectionWiringFactoryTest {
                 wiringFactory.getErrors().get(2));
     }
 
-    public class BoolGetterTest {
-        public boolean isField1() { return true; }
-        public int isField2() { return 0; }
-    }
-
     @Test
     public void isGetterOnNotBooleanTypes() throws Exception {
         ReflectionWiringFactory wiringFactory = wireSchema(
@@ -357,19 +293,6 @@ public class ReflectionWiringFactoryTest {
         assertEquals(
                 "Unable to find resolver for field 'field2' of type 'BoolGetterTest'",
                 wiringFactory.getErrors().get(0));
-    }
-
-    public class InterfaceTestQuery {
-        public NotImplementedInterface getField() { return null; }
-    }
-
-    public interface NotImplementedInterface {
-        String getField1();
-    }
-
-    public class TypeA {
-        public String getField1() { return ""; }
-        public int getField2() { return 0; }
     }
 
     @Test
@@ -399,19 +322,6 @@ public class ReflectionWiringFactoryTest {
                 wiringFactory.getErrors().get(0));
     }
 
-    public class MissingFieldTestQuery {
-        public MissingFieldInterface getField() { return null; }
-    }
-
-    public interface MissingFieldInterface {
-        String getField1();
-    }
-
-    public class TypeB implements MissingFieldInterface {
-        public String getField1() { return ""; }
-        public int getField2() { return 0; }
-    }
-
     @Test
     public void interfaceDoesNotDefineMethod() throws Exception {
         ReflectionWiringFactory wiringFactory = wireSchema(
@@ -437,18 +347,6 @@ public class ReflectionWiringFactoryTest {
         assertEquals(
                 "Interface 'MissingFieldInterface' does not define properly define method 'field2'",
                 wiringFactory.getErrors().get(0));
-    }
-
-    public class NotInterfaceTest {
-        public NotInterface getField() { return null; }
-    }
-
-    public class NotInterface {
-        public String getField1() { return ""; }
-    }
-
-    public class TypeC extends NotInterface {
-        public int getField2() { return 0; }
     }
 
     @Test
@@ -478,22 +376,6 @@ public class ReflectionWiringFactoryTest {
                 wiringFactory.getErrors().get(0));
     }
 
-    public class NotInterfaceUnionQuery {
-        public NotInterfaceUnion fetchUnionFieldA(DataFetchingEnvironment env) { return null; }
-        public NotInterfaceUnion fetchUnionFieldB(DataFetchingEnvironment env) { return null; }
-    }
-
-    public class NotInterfaceUnion {}
-
-    public class UTypeA extends NotInterfaceUnion {
-        public String getStringField() { return "string"; }
-    }
-
-    public class UTypeB extends NotInterfaceUnion {
-        public int getIntField() { return 42; }
-    }
-
-
     @Test
     public void unionIsNotInterface() throws Exception {
         ReflectionWiringFactory wiringFactory = wireSchema(
@@ -521,25 +403,6 @@ public class ReflectionWiringFactoryTest {
         assertEquals(
                 "Class 'NotInterfaceUnion' is not an interface but defined in GraphQL as Union",
                 wiringFactory.getErrors().get(0));
-    }
-
-    public class BadUnionTestQuery {
-        public InterfaceWithMethodsUnion fetchUnionFieldA(DataFetchingEnvironment env) { return null; }
-        public InterfaceWithMethodsUnion fetchUnionFieldB(DataFetchingEnvironment env) { return null; }
-    }
-
-    public interface InterfaceWithMethodsUnion {
-        void method();
-    }
-
-    public class UTypeC implements InterfaceWithMethodsUnion {
-        public String getStringField() { return "string"; }
-        public void method() {}
-    }
-
-    public class UTypeD implements InterfaceWithMethodsUnion {
-        public int getIntField() { return 42; }
-        public void method() {}
     }
 
     @Test
