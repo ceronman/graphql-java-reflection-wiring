@@ -242,7 +242,7 @@ public class ReflectionWiringFactoryTest {
     @Test
     public void classTypeIsNotPublic() throws Exception {
         ReflectionWiringFactory wiringFactory = wireSchema(
-                Collections.singletonList(PrivateClassTest.class), "" +
+                "testresolvers", "" +
                         "    schema {                                             \n" +
                         "        query: PrivateClassTest                          \n" +
                         "    }                                                    \n" +

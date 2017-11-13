@@ -1,5 +1,5 @@
 package testresolvers;
 
-public class PrivateClassTest {
+class PrivateClassTest {
     public int getField() { return 0; }
 }
