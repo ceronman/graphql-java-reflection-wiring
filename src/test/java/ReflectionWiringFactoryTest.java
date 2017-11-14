@@ -231,7 +231,7 @@ public class ReflectionWiringFactoryTest {
     }
 
     @Test
-    public void classTypeIsNotPublic() throws Exception {
+    public void classIsNotPublic() throws Exception {
         ReflectionWiringFactory wiringFactory = wireSchema(
                 "testresolvers", "" +
                         "    schema {                                             \n" +
@@ -283,6 +283,50 @@ public class ReflectionWiringFactoryTest {
         assertEquals(1, wiringFactory.getErrors().size());
         assertEquals(
                 "Unable to find resolver for field 'field2' of type 'BoolGetterTest'",
+                wiringFactory.getErrors().get(0));
+    }
+
+    @Test
+    public void enumValueMismatch() throws Exception {
+        ReflectionWiringFactory wiringFactory = wireSchema(
+                Arrays.asList(BadEnumTestQuery.class, BadEnum1.class, BadEnum2.class),
+                "" +
+                        "    schema {                                             \n" +
+                        "        query: BadEnumTestQuery                          \n" +
+                        "    }                                                    \n" +
+                        "                                                         \n" +
+                        "   enum BadEnum1 { ONE TWO MISSING }                     \n" +
+                        "   enum BadEnum2 { A B }                                 \n" +
+                        "                                                         \n" +
+                        "    type BadEnumTestQuery {                              \n" +
+                        "        field1: BadEnum1                                 \n" +
+                        "        field2: BadEnum2                                 \n" +
+                        "    }");
+        assertEquals(2, wiringFactory.getErrors().size());
+        assertEquals(
+                "Java Enum 'BadEnum1' doesn't have the same values as GraphQL Enum 'BadEnum1'",
+                wiringFactory.getErrors().get(0));
+        assertEquals(
+                "Java Enum 'BadEnum2' doesn't have the same values as GraphQL Enum 'BadEnum2'",
+                wiringFactory.getErrors().get(1));
+    }
+
+    @Test
+    public void enumIsNotEnum() throws Exception {
+        ReflectionWiringFactory wiringFactory = wireSchema(
+                Arrays.asList(NotEnumTestQuery.class, NotEnum.class), "" +
+                        "    schema {                                             \n" +
+                        "        query: NotEnumTestQuery                          \n" +
+                        "    }                                                    \n" +
+                        "                                                         \n" +
+                        "    enum NotEnum { ONE TWO }                             \n" +
+                        "                                                         \n" +
+                        "    type NotEnumTestQuery {                              \n" +
+                        "        field: NotEnum                                   \n" +
+                        "    }");
+        assertEquals(1, wiringFactory.getErrors().size());
+        assertEquals(
+                "Class 'NotEnum' is not Enum",
                 wiringFactory.getErrors().get(0));
     }
 
