@@ -411,7 +411,7 @@ public class ReflectionWiringFactory implements WiringFactory {
         return env -> {
             Object source = env.getSource();
 
-            // TODO: This logic could be done before running the datafetcher
+            // TODO: This logic could be done before running the datafetcher. Also check for default constructor.
             if (source == null && !Modifier.isStatic(method.getModifiers())) {
                 try {
                     source = method.getDeclaringClass().newInstance();
@@ -457,8 +457,15 @@ public class ReflectionWiringFactory implements WiringFactory {
     private DataFetcher buildDataFetcherFromGetter(Method getter) {
         return env -> {
             Object source = env.getSource();
-            if (!Modifier.isStatic(getter.getModifiers()) && env.getSource() == null) {
-                throw new RuntimeException("Getter DataFetcher doesn't have source.");
+            // TODO: This logic could be done before running the datafetcher. Also check for default constructor.
+            // TODO: This logic is repeated in buildDataFetcherFromMethod
+            if (source == null && !Modifier.isStatic(getter.getModifiers())) {
+                try {
+                    source = getter.getDeclaringClass().newInstance();
+                } catch (InstantiationException | IllegalAccessException e) {
+                    throw new RuntimeException(String.format("Unable to create instance of class %s",
+                            getter.getDeclaringClass().getSimpleName()), e);
+                }
             }
             try {
                 return getter.invoke(source);

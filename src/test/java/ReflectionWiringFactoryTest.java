@@ -529,42 +529,31 @@ public class ReflectionWiringFactoryTest {
     }
 
     @Test
-    public void resolveObjectReturn() throws Exception {
-        String result = executeQuery("" +
+    public void resolveObjects() throws Exception {
+        String result = executeQuery(
+                Arrays.asList(ObjectTestQuery.class, TypeA.class, InputTypeA.class),
+                "" +
                         "    schema {                                         \n" +
-                        "        query: TestClass3                            \n" +
+                        "        query: ObjectTestQuery                       \n" +
                         "    }                                                \n" +
                         "                                                     \n" +
-                        "    type TestClass3 {                                \n" +
-                        "        test4: TestClass4                            \n" +
+                        "    type ObjectTestQuery {                           \n" +
+                        "        fieldA: TypeA                                \n" +
+                        "        fieldB(obj: InputTypeA): String              \n" +
                         "    }                                                \n" +
-                        "    type TestClass4 {                                \n" +
+                        "                                                     \n" +
+                        "    type TypeA {                                     \n" +
+                        "        field1: String                               \n" +
+                        "        field2: Int                                  \n" +
+                        "    }                                                \n" +
+                        "                                                     \n" +
+                        "    input InputTypeA {                               \n" +
                         "        field1: String                               \n" +
                         "        field2: Int                                  \n" +
                         "    }                                                \n",
-                "{ test4 { field1, field2 } }");
+                "{ fieldA { field1, field2 }, fieldB(obj: { field1: \"hello\", field2: 1 }) }");
         assertEquals(
-                "{test4={field1=result_field_1, field2=42}}",
-                result);
-    }
-
-    @Test
-    public void resolveObjectParam() throws Exception {
-        String result = executeQuery("" +
-                        "    schema {                                         \n" +
-                        "        query: TestClass3                            \n" +
-                        "    }                                                \n" +
-                        "                                                     \n" +
-                        "    type TestClass3 {                                \n" +
-                        "        objectArg(obj: InputTestClass): String       \n" +
-                        "    }                                                \n" +
-                        "    input InputTestClass {                           \n" +
-                        "        field1: String                               \n" +
-                        "        field2: Int                                  \n" +
-                        "    }                                                \n",
-                "{ objectArg(obj: { field1: \"hello\", field2: 1 }) }");
-        assertEquals(
-                "{objectArg=hello1}",
+                "{fieldA={field1=hello, field2=0}, fieldB=hello1}",
                 result);
     }
 
