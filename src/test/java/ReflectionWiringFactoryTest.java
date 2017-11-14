@@ -16,15 +16,6 @@ import static graphql.schema.idl.RuntimeWiring.newRuntimeWiring;
 import static org.junit.Assert.assertEquals;
 
 public class ReflectionWiringFactoryTest {
-
-    private ReflectionWiringFactory wireSchema(String schema) {
-        return wireSchema("wiringtests", schema);
-    }
-
-    private String executeQuery(String schema, String query) {
-        return executeQuery("wiringtests", schema, query);
-    }
-
     private ReflectionWiringFactory wireSchema(Collection<Class<?>> classes, String schema) {
         SchemaParser schemaParser = new SchemaParser();
         TypeDefinitionRegistry typeDefinitionRegistry = schemaParser.parse(schema);
@@ -45,34 +36,16 @@ public class ReflectionWiringFactoryTest {
         return wiringFactory;
     }
 
-    private String executeQuery(String pkg, String schema, String query) {
-        SchemaParser schemaParser = new SchemaParser();
-        TypeDefinitionRegistry typeDefinitionRegistry = schemaParser.parse(schema);
-        ReflectionWiringFactory wiringFactory = new ReflectionWiringFactory(typeDefinitionRegistry, pkg);
-        RuntimeWiring runtimeWiring = newRuntimeWiring().wiringFactory(wiringFactory).build();
-        SchemaGenerator schemaGenerator = new SchemaGenerator();
-        GraphQLSchema graphQLSchema = schemaGenerator.makeExecutableSchema(typeDefinitionRegistry, runtimeWiring);
-        for (String error : wiringFactory.getErrors()) {
-            throw new RuntimeException(error);
-        }
-        GraphQL build = GraphQL.newGraphQL(graphQLSchema).build();
-        ExecutionResult executionResult = build.execute(query);
-        for (GraphQLError error : executionResult.getErrors()) {
-            throw new RuntimeException(error.toString());
-        }
-        return executionResult.getData().toString();
-    }
-
     private String executeQuery(Collection<Class<?>> classes, String schema, String query) {
         SchemaParser schemaParser = new SchemaParser();
         TypeDefinitionRegistry typeDefinitionRegistry = schemaParser.parse(schema);
         ReflectionWiringFactory wiringFactory = new ReflectionWiringFactory(typeDefinitionRegistry, classes);
-        RuntimeWiring runtimeWiring = newRuntimeWiring().wiringFactory(wiringFactory).build();
-        SchemaGenerator schemaGenerator = new SchemaGenerator();
-        GraphQLSchema graphQLSchema = schemaGenerator.makeExecutableSchema(typeDefinitionRegistry, runtimeWiring);
         for (String error : wiringFactory.getErrors()) {
             throw new RuntimeException(error);
         }
+        RuntimeWiring runtimeWiring = newRuntimeWiring().wiringFactory(wiringFactory).build();
+        SchemaGenerator schemaGenerator = new SchemaGenerator();
+        GraphQLSchema graphQLSchema = schemaGenerator.makeExecutableSchema(typeDefinitionRegistry, runtimeWiring);
         GraphQL build = GraphQL.newGraphQL(graphQLSchema).build();
         ExecutionResult executionResult = build.execute(query);
         for (GraphQLError error : executionResult.getErrors()) {
@@ -83,7 +56,7 @@ public class ReflectionWiringFactoryTest {
 
     @Test
     public void missingClassError() throws Exception {
-        ReflectionWiringFactory wiringFactory = wireSchema("" +
+        ReflectionWiringFactory wiringFactory = wireSchema("testresolvers", "" +
                         "    schema {                                             \n" +
                         "        query: NonExistentClass                          \n" +
                         "    }                                                    \n" +
