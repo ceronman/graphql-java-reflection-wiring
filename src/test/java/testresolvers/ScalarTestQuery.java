@@ -30,14 +30,6 @@ public class ScalarTestQuery {
         return 4.0;
     }
 
-    public Float fetchFloatScalar(DataFetchingEnvironment env) {
-        return 5.0f;
-    }
-
-    public float fetchFloatPrimitiveScalar(DataFetchingEnvironment env) {
-        return 6.0f;
-    }
-
     public String fetchStringScalar(DataFetchingEnvironment env) {
         return "string result";
     }
@@ -50,10 +42,10 @@ public class ScalarTestQuery {
                              boolean boolArg, Boolean boolArg2,
                              int intArg, Integer intArg2,
                              double doubleArg, Double doubleArg2,
-                             float floatArg, Float floatArg2,
                              String strArg, String idArg) {
 
-        return Stream.of(boolArg, boolArg2, intArg, intArg2, doubleArg, doubleArg2, floatArg,
-                floatArg2, strArg, idArg).map(String::valueOf).collect(Collectors.joining("_"));
+        return Stream.of(boolArg, boolArg2, intArg, intArg2, doubleArg, doubleArg2, strArg, idArg)
+                .map(String::valueOf)
+                .collect(Collectors.joining("_"));
     }
 }

@@ -469,15 +469,12 @@ public class ReflectionWiringFactoryTest {
                         "        integerPrimitiveScalar: Int                  \n" +
                         "        doubleScalar:           Float                \n" +
                         "        doublePrimitiveScalar:  Float                \n" +
-                        "        floatScalar:            Float                \n" +
-                        "        floatPrimitiveScalar:   Float                \n" +
                         "        stringScalar:           String               \n" +
                         "        IDScalar:               ID                   \n" +
                         "                                                     \n" +
                         "        field(boolArg: Boolean, boolArg2: Boolean,   \n" +
                         "              intArg: Int, intArg2: Int,             \n" +
                         "              doubleArg: Float, doubleArg2: Float,   \n" +
-                        "              floatArg: Float, floatArg2: Float,     \n" +
                         "              strArg:String, idArg: ID): String      \n" +
                         "    }",
                 "" +
@@ -488,24 +485,20 @@ public class ReflectionWiringFactoryTest {
                         "   integerPrimitiveScalar                            \n" +
                         "   doubleScalar                                      \n" +
                         "   doublePrimitiveScalar                             \n" +
-                        "   floatScalar                                       \n" +
-                        "   floatPrimitiveScalar                              \n" +
                         "   stringScalar                                      \n" +
                         "   IDScalar                                          \n" +
                         "                                                     \n" +
                         "   field(boolArg:true, boolArg2:false,               \n" +
                         "         intArg:1, intArg2:2,                        \n" +
                         "         doubleArg:3.0, doubleArg2:4.0,              \n" +
-                        "         floatArg:5.0, floatArg2:6.0,                \n" +
                         "         strArg:\"str\", idArg:\"id\")               \n" +
                         "}");
         assertEquals(
                 "{booleanScalar=true, booleanPrimitiveScalar=false, " +
                         "integerScalar=1, integerPrimitiveScalar=2, " +
                         "doubleScalar=3.0, doublePrimitiveScalar=4.0, " +
-                        "floatScalar=5.0, floatPrimitiveScalar=6.0, " +
                         "stringScalar=string result, IDScalar=ID result, " +
-                        "field=true_false_1_2_3.0_4.0_5.0_6.0_str_id}",
+                        "field=true_false_1_2_3.0_4.0_str_id}",
                 result);
     }
 

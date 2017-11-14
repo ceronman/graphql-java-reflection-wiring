@@ -88,7 +88,7 @@ public class ReflectionWiringFactory implements WiringFactory {
 
         scalarTypeMap.put("Boolean", new HashSet<>(Arrays.asList(Boolean.class, boolean.class)));
         scalarTypeMap.put("Int", new HashSet<>(Arrays.asList(Integer.class, int.class)));
-        scalarTypeMap.put("Float", new HashSet<>(Arrays.asList(Float.class, float.class, Double.class, double.class)));
+        scalarTypeMap.put("Float", new HashSet<>(Arrays.asList(Double.class, double.class)));
         scalarTypeMap.put("String", new HashSet<>(Collections.singletonList(String.class)));
         scalarTypeMap.put("ID", new HashSet<>(Collections.singletonList(String.class)));
 
@@ -421,7 +421,6 @@ public class ReflectionWiringFactory implements WiringFactory {
             }
 
             List<Object> parameters = new ArrayList<>();
-            Class<?>[] paramTypes = method.getParameterTypes();
             parameters.add(env);
             try {
                 for (InputValueDefinition fieldParam : fieldParams) {
@@ -445,13 +444,7 @@ public class ReflectionWiringFactory implements WiringFactory {
                             continue;
                         }
                     }
-
-                    Class<?> paramType = paramTypes[parameters.size()];
-                    if (paramValue instanceof Double && paramType.equals(float.class) || paramType.equals(Float.class)) {
-                        parameters.add(((Double) paramValue).floatValue());
-                    } else {
-                        parameters.add(paramValue);
-                    }
+                    parameters.add(paramValue);
                 }
                 return method.invoke(source, parameters.toArray());
             } catch (Exception e) {
