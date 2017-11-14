@@ -245,9 +245,23 @@ public class ReflectionWiringFactory implements WiringFactory {
     private void verifyInputObjectType(InputObjectTypeDefinition graphqlInputObjectDef) {
         Class<?> javaClass = inputObjectTypeMap.get(graphqlInputObjectDef.getName());
 
-        // TODO: Validate that input object has complete fields
-        if (javaClass == null || findInputTypeConstructor(javaClass) == null) {
+        if (javaClass == null) {
             return;
+        }
+
+        for (InputValueDefinition valueDef : graphqlInputObjectDef.getInputValueDefinitions()) {
+            Method getter = findGetter(javaClass, valueDef.getName(), valueDef.getType());
+
+            if (getter == null) {
+                error("Input type '%s' doesn't have a getter for field '%s'",
+                        javaClass.getSimpleName(), valueDef.getName());
+            }
+        }
+
+        try {
+            javaClass.getConstructor(Map.class);
+        } catch (NoSuchMethodException e) {
+            error("InputType %s doesn't have a Map<String,Object> constructor", graphqlInputObjectDef.getName());
         }
     }
 
@@ -257,7 +271,7 @@ public class ReflectionWiringFactory implements WiringFactory {
             return fetcherMethod;
         }
 
-        Method getterMethod = findGetter(javaClass, graphqlFieldDef);
+        Method getterMethod = findGetter(javaClass, graphqlFieldDef.getName(), graphqlFieldDef.getType());
         if (getterMethod != null) {
             return getterMethod;
         }
@@ -266,7 +280,7 @@ public class ReflectionWiringFactory implements WiringFactory {
     }
 
     private Method findFetcherMethod(Class<?> javaClass, FieldDefinition graphqlFieldDef) {
-        String fetcherName = buildFetcherName("fetch", graphqlFieldDef);
+        String fetcherName = buildFetcherName("fetch", graphqlFieldDef.getName());
 
         Method method = findPublicMethod(javaClass, fetcherName, graphqlFieldDef.getType());
 
@@ -314,13 +328,13 @@ public class ReflectionWiringFactory implements WiringFactory {
         return method;
     }
 
-    private Method findGetter(Class<?> javaClass, FieldDefinition fieldDefinition) {
-        String fetcherName = buildFetcherName("get", fieldDefinition);
-        Method getter = findPublicMethod(javaClass, fetcherName, fieldDefinition.getType());
+    private Method findGetter(Class<?> javaClass, String fieldName, Type fieldType) {
+        String fetcherName = buildFetcherName("get", fieldName);
+        Method getter = findPublicMethod(javaClass, fetcherName, fieldType);
 
-        if (getter == null && isTypeCompatible(fieldDefinition.getType(), Boolean.class)) {
-            fetcherName = buildFetcherName("is", fieldDefinition);
-            getter = findPublicMethod(javaClass, fetcherName, fieldDefinition.getType());
+        if (getter == null && isTypeCompatible(fieldType, Boolean.class)) {
+            fetcherName = buildFetcherName("is", fieldName);
+            getter = findPublicMethod(javaClass, fetcherName, fieldType);
         }
         return getter;
     }
@@ -398,15 +412,6 @@ public class ReflectionWiringFactory implements WiringFactory {
         }
     }
 
-    private Constructor<?> findInputTypeConstructor(Class<?> inputType) {
-        try {
-            return inputType.getConstructor(Map.class);
-        } catch (NoSuchMethodException e) {
-            error("InputType %s doesn't have a Map<String,Object> constructor", inputType.getName());
-            return null;
-        }
-    }
-
     private DataFetcher buildDataFetcherFromMethod(Method method, List<InputValueDefinition> fieldParams) {
         return env -> {
             Object source = env.getSource();
@@ -431,7 +436,7 @@ public class ReflectionWiringFactory implements WiringFactory {
 
                         Class<?> inputType = inputObjectTypeMap.get(fieldName);
                         if (inputType != null) {
-                            Constructor<?> constructor = findInputTypeConstructor(inputType);
+                            Constructor<?> constructor = inputType.getConstructor(Map.class);
                             Object parameter = constructor.newInstance((Map) paramValue);
                             parameters.add(parameter);
                             continue;
@@ -487,8 +492,7 @@ public class ReflectionWiringFactory implements WiringFactory {
         };
     }
 
-    private String buildFetcherName(String prefix, FieldDefinition fieldDefinition) {
-        String fieldName = fieldDefinition.getName();
+    private String buildFetcherName(String prefix, String fieldName) {
         return prefix + fieldName.substring(0, 1).toUpperCase() + fieldName.substring(1);
     }
 

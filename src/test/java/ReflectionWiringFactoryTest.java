@@ -19,21 +19,13 @@ public class ReflectionWiringFactoryTest {
     private ReflectionWiringFactory wireSchema(Collection<Class<?>> classes, String schema) {
         SchemaParser schemaParser = new SchemaParser();
         TypeDefinitionRegistry typeDefinitionRegistry = schemaParser.parse(schema);
-        ReflectionWiringFactory wiringFactory = new ReflectionWiringFactory(typeDefinitionRegistry, classes);
-        RuntimeWiring runtimeWiring = newRuntimeWiring().wiringFactory(wiringFactory).build();
-        SchemaGenerator schemaGenerator = new SchemaGenerator();
-        schemaGenerator.makeExecutableSchema(typeDefinitionRegistry, runtimeWiring);
-        return wiringFactory;
+        return new ReflectionWiringFactory(typeDefinitionRegistry, classes);
     }
 
     private ReflectionWiringFactory wireSchema(String pkg, String schema) {
         SchemaParser schemaParser = new SchemaParser();
         TypeDefinitionRegistry typeDefinitionRegistry = schemaParser.parse(schema);
-        ReflectionWiringFactory wiringFactory = new ReflectionWiringFactory(typeDefinitionRegistry, pkg);
-        RuntimeWiring runtimeWiring = newRuntimeWiring().wiringFactory(wiringFactory).build();
-        SchemaGenerator schemaGenerator = new SchemaGenerator();
-        schemaGenerator.makeExecutableSchema(typeDefinitionRegistry, runtimeWiring);
-        return wiringFactory;
+        return new ReflectionWiringFactory(typeDefinitionRegistry, pkg);
     }
 
     private String executeQuery(Collection<Class<?>> classes, String schema, String query) {
@@ -55,7 +47,7 @@ public class ReflectionWiringFactoryTest {
     }
 
     @Test
-    public void missingClassError() throws Exception {
+    public void missingClass() throws Exception {
         ReflectionWiringFactory wiringFactory = wireSchema("testresolvers", "" +
                         "    schema {                                             \n" +
                         "        query: NonExistentClass                          \n" +
@@ -71,7 +63,7 @@ public class ReflectionWiringFactoryTest {
     }
 
     @Test
-    public void missingResolverError() throws Exception {
+    public void missingResolver() throws Exception {
         ReflectionWiringFactory wiringFactory = wireSchema(
                 Collections.singletonList(MissingFieldTest.class), "" +
                         "    schema {                                             \n" +
@@ -84,6 +76,51 @@ public class ReflectionWiringFactoryTest {
         assertEquals(1, wiringFactory.getErrors().size());
         assertEquals(
                 "Unable to find resolver for field 'hello' of type 'MissingFieldTest'",
+                wiringFactory.getErrors().get(0));
+    }
+
+    @Test
+    public void missingInputObjectField() throws Exception {
+        ReflectionWiringFactory wiringFactory = wireSchema(
+                Arrays.asList(MissingInputFieldQuery.class, InputTypeA.class), "" +
+                        "    schema {                                             \n" +
+                        "        query: MissingInputFieldQuery                    \n" +
+                        "    }                                                    \n" +
+                        "                                                         \n" +
+                        "    input InputTypeA {                                   \n" +
+                        "        field1: String                                   \n" +
+                        "        field2: Int                                      \n" +
+                        "        missingField: Float                              \n" +
+                        "    }                                                    \n" +
+                        "                                                         \n" +
+                        "    type MissingInputFieldQuery {                        \n" +
+                        "        field(arg: InputTypeA): String                   \n" +
+                        "    }");
+        assertEquals(1, wiringFactory.getErrors().size());
+        assertEquals(
+                "Input type 'InputTypeA' doesn't have a getter for field 'missingField'",
+                wiringFactory.getErrors().get(0));
+    }
+
+    @Test
+    public void inputTypeWithoutConstructor() throws Exception {
+        ReflectionWiringFactory wiringFactory = wireSchema(
+                Arrays.asList(BadInputTypeQuery.class, BadInputType.class), "" +
+                        "    schema {                                             \n" +
+                        "        query: BadInputTypeQuery                         \n" +
+                        "    }                                                    \n" +
+                        "                                                         \n" +
+                        "    input BadInputType {                                 \n" +
+                        "        field1: String                                   \n" +
+                        "        field2: Int                                      \n" +
+                        "    }                                                    \n" +
+                        "                                                         \n" +
+                        "    type BadInputTypeQuery {                             \n" +
+                        "        field(arg: BadInputType): String                 \n" +
+                        "    }");
+        assertEquals(1, wiringFactory.getErrors().size());
+        assertEquals(
+                "InputType BadInputType doesn't have a Map<String,Object> constructor",
                 wiringFactory.getErrors().get(0));
     }
 
