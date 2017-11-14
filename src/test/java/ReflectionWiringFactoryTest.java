@@ -7,7 +7,7 @@ import graphql.schema.idl.SchemaGenerator;
 import graphql.schema.idl.SchemaParser;
 import graphql.schema.idl.TypeDefinitionRegistry;
 import org.junit.Test;
-import test.NoEnvArgTest;
+import testresolvers.NoEnvArgTest;
 import testresolvers.*;
 
 import java.util.*;
@@ -454,7 +454,7 @@ public class ReflectionWiringFactoryTest {
     }
 
     @Test
-    public void resolveScalarReturns() throws Exception {
+    public void resolveScalars() throws Exception {
         String result = executeQuery(
                 Collections.singletonList(ScalarTestQuery.class),
                 "" +
@@ -503,41 +503,28 @@ public class ReflectionWiringFactoryTest {
     }
 
     @Test
-    public void resolveListReturn() throws Exception {
-        String result = executeQuery("" +
+    public void resolveLists() throws Exception {
+        String result = executeQuery(
+                Arrays.asList(ListTestQuery.class, TypeA.class),
+                "" +
                         "    schema {                                         \n" +
-                        "        query: TestClass3                            \n" +
+                        "        query: ListTestQuery                         \n" +
                         "    }                                                \n" +
                         "                                                     \n" +
-                        "    type TestClass3 {                                \n" +
-                        "        arrayList: [Int]                             \n" +
-                        "        listList: [TestClass4]                       \n" +
-                        "    }" +
-                        "    type TestClass4 {                                \n" +
+                        "    type ListTestQuery {                             \n" +
+                        "        field1: [Int]                                \n" +
+                        "        field2: [TypeA]                              \n" +
+                        "        field3(arg: [Int]): String                   \n" +
+                        "    }                                                \n" +
+                        "                                                     \n" +
+                        "    type TypeA {                                     \n" +
                         "        field1: String                               \n" +
                         "        field2: Int                                  \n" +
                         "    }                                                \n",
 
-                "{ arrayList, listList { field2 } }");
+                "{ field1, field2 { field2 }, field3(arg: [1, 2, 3]) }");
         assertEquals(
-                "{arrayList=[3, 4], listList=[{field2=42}]}",
-                result);
-    }
-
-    @Test
-    public void resolveListParameter() throws Exception {
-        String result = executeQuery("" +
-                        "    schema {                                         \n" +
-                        "        query: TestClass3                            \n" +
-                        "    }                                                \n" +
-                        "                                                     \n" +
-                        "    type TestClass3 {                                \n" +
-                        "        fieldWithListParam(arg: [Int]): String       \n" +
-                        "    }",
-
-                "{ fieldWithListParam(arg: [1, 2, 3]) }");
-        assertEquals(
-                "{fieldWithListParam=1_2_3}",
+                "{field1=[3, 4], field2=[{field2=0}], field3=1_2_3}",
                 result);
     }
 

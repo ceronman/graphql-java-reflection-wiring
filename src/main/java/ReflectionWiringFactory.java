@@ -301,6 +301,7 @@ public class ReflectionWiringFactory implements WiringFactory {
         for (int i = 0; i < methodParams.size(); i++) {
             Parameter param = methodParams.get(i);
             InputValueDefinition inputDef = fieldParams.get(i);
+            // TODO: provide better error handling in case of using logs, shorts, floats, etc.
             if (!isTypeCompatible(inputDef.getType(), param.getType(), param.getAnnotatedType())) {
                 error("Type mismatch in method '%s', argument '%d' in class '%s' " +
                                 "expected '%s', got '%s'",
