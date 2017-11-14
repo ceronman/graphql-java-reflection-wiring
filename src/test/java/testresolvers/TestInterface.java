@@ -1,7 +1,7 @@
-package wiringtests;
+package testresolvers;
 
 import graphql.schema.DataFetchingEnvironment;
 
 public interface TestInterface {
-    String fetchField1(DataFetchingEnvironment env);
+    String getField1();
 }

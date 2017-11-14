@@ -316,13 +316,13 @@ public class ReflectionWiringFactoryTest {
     @Test
     public void classDoesNotImplementInterface() throws Exception {
         ReflectionWiringFactory wiringFactory = wireSchema(
-                Arrays.asList(InterfaceTestQuery.class, TypeA.class, NotImplementedInterface.class),
+                Arrays.asList(BadInterfaceTestQuery.class, TypeA.class, NotImplementedInterface.class),
                 "" +
                 "    schema {                                             \n" +
-                "        query: InterfaceTestQuery                        \n" +
+                "        query: BadInterfaceTestQuery                     \n" +
                 "    }                                                    \n" +
                 "                                                         \n" +
-                "    type InterfaceTestQuery {                            \n" +
+                "    type BadInterfaceTestQuery {                         \n" +
                 "        field: NotImplementedInterface                   \n" +
                 "    }                                                    \n" +
                 "                                                         \n" +
@@ -558,75 +558,61 @@ public class ReflectionWiringFactoryTest {
     }
 
     @Test
-    public void resolveEnumParam() throws Exception {
-        String result = executeQuery("" +
+    public void resolveEnums() throws Exception {
+        String result = executeQuery(
+                Arrays.asList(EnumTestQuery.class, TestEnum.class),
+                "" +
                         "    schema {                                         \n" +
-                        "        query: TestClass3                            \n" +
+                        "        query: EnumTestQuery                         \n" +
                         "    }                                                \n" +
                         "                                                     \n" +
-                        "    type TestClass3 {                                \n" +
-                        "        enumArg(e: TestEnum): String                 \n" +
+                        "    type EnumTestQuery {                             \n" +
+                        "        field1(e: TestEnum): String                  \n" +
+                        "        field2: TestEnum                             \n" +
                         "    }                                                \n" +
                         "    enum TestEnum {                                  \n" +
                         "        ONE                                          \n" +
                         "        TWO                                          \n" +
                         "        THREE                                        \n" +
                         "    }                                                \n",
-                "{ enumArg(e: THREE) }");
+                "{ field1(e: THREE), field2 }");
         assertEquals(
-                "{enumArg=THREE}",
+                "{field1=THREE, field2=ONE}",
                 result);
     }
 
     @Test
-    public void resolveEnumReturn() throws Exception {
-        String result = executeQuery("" +
-                        "    schema {                                         \n" +
-                        "        query: TestClass3                            \n" +
-                        "    }                                                \n" +
-                        "                                                     \n" +
-                        "    type TestClass3 {                                \n" +
-                        "        enumReturn: TestEnum                         \n" +
-                        "    }                                                \n" +
-                        "    enum TestEnum {                                  \n" +
-                        "        ONE                                          \n" +
-                        "        TWO                                          \n" +
-                        "        THREE                                        \n" +
-                        "    }                                                \n",
-                "{ enumReturn }");
-        assertEquals(
-                "{enumReturn=ONE}",
-                result);
-    }
-
-    @Test
-    public void resolveInterfaceReturn() throws Exception {
-        String result = executeQuery("" +
+    public void resolveInterface() throws Exception {
+        String result = executeQuery(
+                Arrays.asList(InterfaceTestQuery.class, TestInterface.class, TypeD.class),
+                "" +
                 "    schema {                                             \n" +
-                "        query: TestClass3                                \n" +
+                "        query: InterfaceTestQuery                        \n" +
                 "    }                                                    \n" +
                 "                                                         \n" +
-                "    type TestClass3 {                                    \n" +
-                "        interfaceField2: TestInterface2                  \n" +
+                "    type InterfaceTestQuery {                            \n" +
+                "        fieldA: TestInterface                            \n" +
                 "    }                                                    \n" +
                 "                                                         \n" +
-                "    interface TestInterface2 {                           \n" +
-                "        stringField: String                              \n" +
+                "    interface TestInterface {                            \n" +
+                "        field1: String                                   \n" +
                 "    }                                                    \n" +
                 "                                                         \n" +
-                "    type TestClass7 implements TestInterface2 {          \n" +
-                "        stringField: String                              \n" +
-                "        intField: Int                                    \n" +
+                "    type TypeD implements TestInterface {                \n" +
+                "        field1: String                                   \n" +
+                "        field2: Int                                      \n" +
                 "    }                                                    \n",
-                "{ interfaceField2 { stringField } }");
+                "{ fieldA { field1 } }");
         assertEquals(
-                "{interfaceField2={stringField=string}}",
+                "{fieldA={field1=hello}}",
                 result);
     }
 
     @Test
     public void resolveUnionReturn() throws Exception {
-        String result = executeQuery("uniontests", "" +
+        String result = executeQuery(
+                Arrays.asList(UnionTestQuery.class, TestUnion.class, TypeWithString.class, TypeWithInt.class),
+                "" +
                         "    schema {                                             \n" +
                         "        query: UnionTestQuery                            \n" +
                         "    }                                                    \n" +
@@ -636,19 +622,19 @@ public class ReflectionWiringFactoryTest {
                         "        unionFieldB: TestUnion                           \n" +
                         "    }                                                    \n" +
                         "                                                         \n" +
-                        "    union TestUnion = TypeA | TypeB                      \n" +
+                        "    union TestUnion = TypeWithString | TypeWithInt       \n" +
                         "                                                         \n" +
-                        "    type TypeA {                                         \n" +
+                        "    type TypeWithString {                                \n" +
                         "        stringField: String                              \n" +
                         "    }                                                    \n" +
                         "                                                         \n" +
-                        "    type TypeB {                                         \n" +
+                        "    type TypeWithInt {                                   \n" +
                         "        intField: Int                                    \n" +
                         "    }                                                    \n",
-                "{ unionFieldA{ ... on TypeA { stringField }, " +
-                        "              ... on TypeB { intField } }," +
-                        " unionFieldB{ ... on TypeA { stringField }, " +
-                        "              ... on TypeB { intField } } }");
+                "{ unionFieldA{ ... on TypeWithString { stringField }, " +
+                        "              ... on TypeWithInt { intField } }," +
+                        " unionFieldB{ ... on TypeWithString { stringField }, " +
+                        "              ... on TypeWithInt { intField } } }");
         assertEquals(
                 "{unionFieldA={stringField=string}, unionFieldB={intField=42}}",
                 result);

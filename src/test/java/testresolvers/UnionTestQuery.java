@@ -1,13 +1,13 @@
-package uniontests;
+package testresolvers;
 
 import graphql.schema.DataFetchingEnvironment;
 
 public class UnionTestQuery {
     public static TestUnion fetchUnionFieldA(DataFetchingEnvironment env) {
-        return new TypeA();
+        return new TypeWithString();
     }
 
     public static TestUnion fetchUnionFieldB(DataFetchingEnvironment env) {
-        return new TypeB();
+        return new TypeWithInt();
     }
 }

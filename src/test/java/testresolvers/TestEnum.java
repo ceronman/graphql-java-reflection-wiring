@@ -1,4 +1,4 @@
-package wiringtests;
+package testresolvers;
 
 public enum TestEnum {
     ONE,

@@ -1,4 +1,4 @@
-package uniontests;
+package testresolvers;
 
 public interface TestUnion {
 }
