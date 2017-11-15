@@ -285,6 +285,24 @@ public class ReflectionWiringFactoryTest {
     }
 
     @Test
+    public void classWithoutDefaultConstructor() throws Exception {
+        ReflectionWiringFactory wiringFactory = wireSchema(
+                "testresolvers", "" +
+                        "    schema {                                             \n" +
+                        "        query: ClassWithoutDefaultConstructor            \n" +
+                        "    }                                                    \n" +
+                        "                                                         \n" +
+                        "    type ClassWithoutDefaultConstructor {                \n" +
+                        "        field: Int                                       \n" +
+                        "    }");
+        assertEquals(1, wiringFactory.getErrors().size());
+        assertEquals(
+                "Class 'ClassWithoutDefaultConstructor' doesn't have a default constructor " +
+                        "but it has non-static resolvers",
+                wiringFactory.getErrors().get(0));
+    }
+
+    @Test
     public void fetcherIsOverloaded() throws Exception {
         ReflectionWiringFactory wiringFactory = wireSchema(
                 Collections.singletonList(OverloadedMethodTest.class), "" +

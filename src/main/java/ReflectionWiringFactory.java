@@ -170,6 +170,19 @@ public class ReflectionWiringFactory implements WiringFactory {
             resolverMap.get(typeName).put(fieldDef.getName(), method);
         }
 
+        boolean hasNonStaticResolver = resolverMap.getOrDefault(typeName, Collections.emptyMap()).values()
+                .stream()
+                .anyMatch(method -> !Modifier.isStatic(method.getModifiers()));
+
+        if (hasNonStaticResolver) {
+            try {
+                javaClass.getConstructor();
+            } catch (NoSuchMethodException e) {
+                error("Class '%s' doesn't have a default constructor but it has non-static resolvers",
+                        javaClass.getSimpleName());
+            }
+        }
+
         for (String interfaceName : interfacesImplemented.getOrDefault(typeName, Collections.emptySet())) {
             Class<?> javaInterface = interfaceTypeMap.get(interfaceName);
             if (javaInterface == null || !javaInterface.isAssignableFrom(javaClass)) {
@@ -414,21 +427,15 @@ public class ReflectionWiringFactory implements WiringFactory {
 
     private DataFetcher buildDataFetcherFromMethod(Method method, List<InputValueDefinition> fieldParams) {
         return env -> {
-            Object source = env.getSource();
-
-            // TODO: This logic could be done before running the datafetcher. Also check for default constructor.
-            if (source == null && !Modifier.isStatic(method.getModifiers())) {
-                try {
-                    source = method.getDeclaringClass().newInstance();
-                } catch (InstantiationException | IllegalAccessException e) {
-                    throw new RuntimeException(String.format("Unable to create instance of class %s",
-                            method.getDeclaringClass().getSimpleName()), e);
-                }
-            }
-
             List<Object> parameters = new ArrayList<>();
             parameters.add(env);
+
             try {
+                Object source = env.getSource();
+                if (source == null && !Modifier.isStatic(method.getModifiers())) {
+                    source = method.getDeclaringClass().newInstance();
+                }
+
                 for (InputValueDefinition fieldParam : fieldParams) {
                     Object paramValue = env.getArgument(fieldParam.getName());
                     if (fieldParam.getType() instanceof TypeName) {
@@ -461,18 +468,12 @@ public class ReflectionWiringFactory implements WiringFactory {
 
     private DataFetcher buildDataFetcherFromGetter(Method getter) {
         return env -> {
-            Object source = env.getSource();
-            // TODO: This logic could be done before running the datafetcher. Also check for default constructor.
-            // TODO: This logic is repeated in buildDataFetcherFromMethod
-            if (source == null && !Modifier.isStatic(getter.getModifiers())) {
-                try {
-                    source = getter.getDeclaringClass().newInstance();
-                } catch (InstantiationException | IllegalAccessException e) {
-                    throw new RuntimeException(String.format("Unable to create instance of class %s",
-                            getter.getDeclaringClass().getSimpleName()), e);
-                }
-            }
             try {
+                Object source = env.getSource();
+                if (source == null && !Modifier.isStatic(getter.getModifiers())) {
+                    source = getter.getDeclaringClass().newInstance();
+                }
+
                 return getter.invoke(source);
             } catch (Exception e) {
                 throw new RuntimeException("Error invoking data fetcher: " + e.toString(), e);
@@ -483,6 +484,7 @@ public class ReflectionWiringFactory implements WiringFactory {
     private TypeResolver buildTypeResolver(String interfaceName) {
         Map<Class<?>, String> implementingClasses = interfacesImplemented.keySet().stream()
                 .filter(c -> interfacesImplemented.get(c).contains(interfaceName))
+                .distinct()
                 .collect(Collectors.toMap(objectTypeMap::get, Function.identity()));
 
         return env -> {
