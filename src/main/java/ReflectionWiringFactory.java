@@ -345,7 +345,7 @@ public class ReflectionWiringFactory implements WiringFactory {
         String fetcherName = buildFetcherName("get", fieldName);
         Method getter = findPublicMethod(javaClass, fetcherName, fieldType);
 
-        if (getter == null && isTypeCompatible(fieldType, Boolean.class)) {
+        if (getter == null && isTypeCompatible(fieldType, Boolean.class, null)) {
             fetcherName = buildFetcherName("is", fieldName);
             getter = findPublicMethod(javaClass, fetcherName, fieldType);
         }
@@ -377,10 +377,6 @@ public class ReflectionWiringFactory implements WiringFactory {
         return method;
     }
 
-    private boolean isTypeCompatible(Type graphqlType, Class<?> javaType) {
-        return isTypeCompatible(graphqlType, javaType, null);
-    }
-
     private boolean isTypeCompatible(Type graphqlType, Class<?> javaType, AnnotatedType javaAnnotatedType) {
         if (graphqlType instanceof TypeName) {
             String typeName = typeToString(graphqlType);
@@ -409,7 +405,9 @@ public class ReflectionWiringFactory implements WiringFactory {
 
             Class<?> javaInnerType = (Class<?>) parameterizedType.getAnnotatedActualTypeArguments()[0].getType();
             Type graphqlInnerType = ((ListType)graphqlType).getType();
-            return isTypeCompatible(graphqlInnerType, javaInnerType);
+            return isTypeCompatible(graphqlInnerType, javaInnerType, null);
+        } else if (graphqlType instanceof NonNullType) {
+            return isTypeCompatible(((NonNullType) graphqlType).getType(), javaType, javaAnnotatedType);
         }
 
         return false;
@@ -419,7 +417,9 @@ public class ReflectionWiringFactory implements WiringFactory {
         if (graphqlType instanceof TypeName) {
             return ((TypeName)graphqlType).getName();
         } else if (graphqlType instanceof ListType) {
-            return String.format("[%s]", typeToString(((ListType)graphqlType).getType()));
+            return String.format("[%s]", typeToString(((ListType) graphqlType).getType()));
+        } else if (graphqlType instanceof NonNullType) {
+            return String.format("%s!", typeToString(((NonNullType) graphqlType).getType()));
         } else {
             throw new RuntimeException("Unknown type");
         }

@@ -601,6 +601,35 @@ public class ReflectionWiringFactoryTest {
     }
 
     @Test
+    public void resolveNotNull() throws Exception {
+        String result = executeQuery(
+                Arrays.asList(NotNullTestQuery.class, TypeA.class),
+                "" +
+                        "    schema {                                         \n" +
+                        "        query: NotNullTestQuery                      \n" +
+                        "    }                                                \n" +
+                        "                                                     \n" +
+                        "    type NotNullTestQuery {                          \n" +
+                        "        field1: Int!                                 \n" +
+                        "        field2: TypeA!                               \n" +
+                        "        field3: [String!]                            \n" +
+                        "        field4: [Float]!                             \n" +
+                        "        field5: [TypeA!]!                            \n" +
+                        "        field6(arg: String!): String                 \n" +
+                        "    }                                                \n" +
+                        "                                                     \n" +
+                        "    type TypeA {                                     \n" +
+                        "        field1: String                               \n" +
+                        "        field2: Int                                  \n" +
+                        "    }                                                \n",
+
+                "{ field1, field2 { field2 }, field3, field4, field5 { field1 }, field6(arg: \"hello\") }");
+        assertEquals(
+                "{field1=1, field2={field2=0}, field3=[], field4=[], field5=[], field6=hello}",
+                result);
+    }
+
+    @Test
     public void resolveObjects() throws Exception {
         String result = executeQuery(
                 Arrays.asList(ObjectTestQuery.class, TypeA.class, InputTypeA.class),
