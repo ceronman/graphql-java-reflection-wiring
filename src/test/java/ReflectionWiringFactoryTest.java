@@ -1,3 +1,4 @@
+import graphql.ExecutionInput;
 import graphql.ExecutionResult;
 import graphql.GraphQL;
 import graphql.GraphQLError;
@@ -11,6 +12,7 @@ import testresolvers.NoEnvArgTest;
 import testresolvers.*;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static graphql.schema.idl.RuntimeWiring.newRuntimeWiring;
 import static org.junit.Assert.assertEquals;
@@ -29,6 +31,10 @@ public class ReflectionWiringFactoryTest {
     }
 
     private String executeQuery(Collection<Class<?>> classes, String schema, String query) {
+        return executeQuery(classes, schema, query, null);
+    }
+
+    private String executeQuery(Collection<Class<?>> classes, String schema, String query, Object context) {
         SchemaParser schemaParser = new SchemaParser();
         TypeDefinitionRegistry typeDefinitionRegistry = schemaParser.parse(schema);
         ReflectionWiringFactory wiringFactory = new ReflectionWiringFactory(typeDefinitionRegistry, classes);
@@ -39,7 +45,11 @@ public class ReflectionWiringFactoryTest {
         SchemaGenerator schemaGenerator = new SchemaGenerator();
         GraphQLSchema graphQLSchema = schemaGenerator.makeExecutableSchema(typeDefinitionRegistry, runtimeWiring);
         GraphQL build = GraphQL.newGraphQL(graphQLSchema).build();
-        ExecutionResult executionResult = build.execute(query);
+        ExecutionInput executionInput = ExecutionInput.newExecutionInput()
+                .query(query)
+                .context(context)
+                .build();
+        ExecutionResult executionResult = build.execute(executionInput);
         for (GraphQLError error : executionResult.getErrors()) {
             throw new RuntimeException(error.toString());
         }
@@ -297,8 +307,8 @@ public class ReflectionWiringFactoryTest {
                         "    }");
         assertEquals(1, wiringFactory.getErrors().size());
         assertEquals(
-                "Class 'ClassWithoutDefaultConstructor' doesn't have a default constructor " +
-                        "but it has non-static resolvers",
+                "Class 'ClassWithoutDefaultConstructor' is root query and doesn't have a default " +
+                        "constructor but it has non-static resolvers",
                 wiringFactory.getErrors().get(0));
     }
 
@@ -739,5 +749,54 @@ public class ReflectionWiringFactoryTest {
         assertEquals(
                 "{unionFieldA={stringField=string}, unionFieldB={intField=42}}",
                 result);
+    }
+
+    @Test
+    public void resolveBatchedResolver() throws Exception {
+
+        AtomicInteger queryCounter = new AtomicInteger();
+
+        String result = executeQuery(
+                Arrays.asList(BatchLoaderTest.class, Shop.class, Department.class, Product.class),
+                "" +
+                        "    schema {                                             \n" +
+                        "        query: BatchLoaderTest                           \n" +
+                        "    }                                                    \n" +
+                        "                                                         \n" +
+                        "    type BatchLoaderTest {                               \n" +
+                        "        shops: [Shop]                                    \n" +
+                        "    }                                                    \n" +
+                        "                                                         \n" +
+                        "    type Shop {                                          \n" +
+                        "        id: Int                                          \n" +
+                        "        name: String                                     \n" +
+                        "        departments: [Department]                        \n" +
+                        "    }                                                    \n" +
+                        "                                                         \n" +
+                        "    type Department {                                    \n" +
+                        "        id: Int                                          \n" +
+                        "        name: String                                     \n" +
+                        "        products: [Product]                              \n" +
+                        "    }                                                    \n" +
+                        "                                                         \n" +
+                        "    type Product {                                       \n" +
+                        "        id: Int                                          \n" +
+                        "        name: String                                     \n" +
+                        "    }                                                    \n",
+                "{ shops { id, name, departments { id, name, products { id, name } } } }",
+                queryCounter);
+
+        assertEquals(
+                "{shops=[{id=1, name=Shop #1, departments=[{id=101, name=Department #101, " +
+                        "products=[{id=1010001, name=Product #1010001}, {id=1010002, name=Product #1010002}]}, " +
+                        "{id=102, name=Department #102, " +
+                        "products=[{id=1020001, name=Product #1020001}, {id=1020002, name=Product #1020002}]}]}, " +
+                        "{id=2, name=Shop #2, departments=[{id=201, name=Department #201, " +
+                        "products=[{id=2010001, name=Product #2010001}, {id=2010002, name=Product #2010002}]}, " +
+                        "{id=202, name=Department #202, " +
+                        "products=[{id=2020001, name=Product #2020001}, {id=2020002, name=Product #2020002}]}]}]}",
+                result);
+
+        assertEquals(1, queryCounter.intValue());
     }
 }

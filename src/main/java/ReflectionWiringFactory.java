@@ -33,6 +33,7 @@ public class ReflectionWiringFactory implements WiringFactory {
         }
         registerTypes(registry.types().values(), classes);
         verifyClasses(registry.types().values());
+        verifyQueries(registry);
     }
 
     public ReflectionWiringFactory(TypeDefinitionRegistry registry, Collection<Class<?>> classList) {
@@ -40,6 +41,7 @@ public class ReflectionWiringFactory implements WiringFactory {
                 .collect(Collectors.toMap(Class::getSimpleName, Function.identity()));
         registerTypes(registry.types().values(), classes);
         verifyClasses(registry.types().values());
+        verifyQueries(registry);
     }
 
     @Override
@@ -149,6 +151,33 @@ public class ReflectionWiringFactory implements WiringFactory {
         }
     }
 
+    private void verifyQueries(TypeDefinitionRegistry registry) {
+        registry.schemaDefinition().ifPresent(schema -> {
+            List<String> queryTypeNames = schema.getOperationTypeDefinitions().stream()
+                    .filter(op -> "query".equals(op.getName()))
+                    .filter(op -> op.getType() instanceof TypeName)
+                    .map(op -> ((TypeName)op.getType()).getName())
+                    .collect(Collectors.toList());
+
+            for (String typeName: queryTypeNames) {
+                boolean hasNonStaticResolver = resolverMap.getOrDefault(typeName, Collections.emptyMap()).values()
+                        .stream()
+                        .anyMatch(method -> !Modifier.isStatic(method.getModifiers()));
+
+                if (hasNonStaticResolver) {
+                    Class<?> javaClass = objectTypeMap.get(typeName);
+                    try {
+                        javaClass.getConstructor();
+                    } catch (NoSuchMethodException e) {
+                        error("Class '%s' is root query and doesn't have a default " +
+                                        "constructor but it has non-static resolvers",
+                                javaClass.getSimpleName());
+                    }
+                }
+            }
+        });
+    }
+
     private void verifyObjectType(ObjectTypeDefinition graphqlObjectTypeDef) {
         String typeName = graphqlObjectTypeDef.getName();
         Class<?> javaClass = objectTypeMap.get(typeName);
@@ -168,19 +197,6 @@ public class ReflectionWiringFactory implements WiringFactory {
 
             resolverMap.putIfAbsent(typeName, new HashMap<>());
             resolverMap.get(typeName).put(fieldDef.getName(), method);
-        }
-
-        boolean hasNonStaticResolver = resolverMap.getOrDefault(typeName, Collections.emptyMap()).values()
-                .stream()
-                .anyMatch(method -> !Modifier.isStatic(method.getModifiers()));
-
-        if (hasNonStaticResolver) {
-            try {
-                javaClass.getConstructor();
-            } catch (NoSuchMethodException e) {
-                error("Class '%s' doesn't have a default constructor but it has non-static resolvers",
-                        javaClass.getSimpleName());
-            }
         }
 
         for (String interfaceName : interfacesImplemented.getOrDefault(typeName, Collections.emptySet())) {
@@ -461,7 +477,7 @@ public class ReflectionWiringFactory implements WiringFactory {
                 }
                 return method.invoke(source, parameters.toArray());
             } catch (Exception e) {
-                throw new RuntimeException("Error invoking data fetcher", e);
+                throw new RuntimeException("Error invoking data fetcher: " + e.toString(), e);
             }
         };
     }

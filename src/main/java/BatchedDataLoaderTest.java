@@ -29,8 +29,6 @@ public class BatchedDataLoaderTest {
         File schemaFile = new File(BatchedDataLoaderTest.class.getResource("schema.graphqls").getFile());
         TypeDefinitionRegistry typeDefinitionRegistry = schemaParser.parse(schemaFile);
         SchemaGenerator schemaGenerator = new SchemaGenerator();
-        RuntimeWiring wiring = buildRuntimeWiring();
-        GraphQLSchema graphQLSchema = schemaGenerator.makeExecutableSchema(typeDefinitionRegistry, wiring);
 
         BatchLoader<Integer, Object> facilityBatchLoader = keys -> CompletableFuture.supplyAsync(() -> {
             System.out.println("Fetching Facilities!");
@@ -49,6 +47,8 @@ public class BatchedDataLoaderTest {
         DataLoaderRegistry registry = new DataLoaderRegistry();
         registry.register("facility", facilityDataLoader);
 
+        RuntimeWiring wiring = buildRuntimeWiring(registry);
+        GraphQLSchema graphQLSchema = schemaGenerator.makeExecutableSchema(typeDefinitionRegistry, wiring);
         GraphQL graphQL = GraphQL.newGraphQL(graphQLSchema)
                 .instrumentation(new DataLoaderDispatcherInstrumentation(registry))
                 .build();
@@ -57,7 +57,6 @@ public class BatchedDataLoaderTest {
 
         ExecutionInput executionInput = ExecutionInput.newExecutionInput()
                 .query(query)
-                .context(registry)
                 .build();
 
         ExecutionResult executionResult = graphQL.execute(executionInput);
@@ -65,7 +64,7 @@ public class BatchedDataLoaderTest {
         System.out.println(executionResult.getData().toString());
     }
 
-    public static RuntimeWiring buildRuntimeWiring() {
+    public static RuntimeWiring buildRuntimeWiring(DataLoaderRegistry registry) {
         return RuntimeWiring.newRuntimeWiring()
                 // this uses builder function lambda syntax
                 .type("RootQuery", typeWiring -> typeWiring
@@ -101,8 +100,7 @@ public class BatchedDataLoaderTest {
                         .dataFetcher("facilities", e -> {
                             Map<String, Object> room = e.getSource();
                             int roomId = (int) room.get("id");
-                            DataLoaderRegistry dlRegistry = e.getContext();
-                            DataLoader<Integer, Object> facilityDL = dlRegistry.getDataLoader("facility");
+                            DataLoader<Integer, Object> facilityDL = registry.getDataLoader("facility");
 
                             List<Integer> facilityIds = IntStream.of(1, 2, 3)
                                     .boxed()
